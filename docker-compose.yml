@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  diplomacy-engine:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # SQLite via aiosqlite (see app/db.py), not a separate DB server, per
+      # the project's "no heavy server-side services" constraint (see
+      # PROJECT_HANDOFF.md's 4GB-RAM Mac Mini deployment target). Points at
+      # the mounted volume below so the db survives container recreation.
+      - DATABASE_URL=sqlite+aiosqlite:////data/diplomacy.db
+    volumes:
+      - diplomacy_data:/data
+
+# No tournament-worker service: it referenced a "Dockerfile.worker" and a
+# VLLM_BASE_URL with no corresponding code anywhere in the repo - building
+# that image would mean inventing an entire unspecified worker subsystem
+# rather than fixing a broken reference. Re-add it once that subsystem
+# actually exists (see TODO.md).
+
+volumes:
+  diplomacy_data:

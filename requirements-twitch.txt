@@ -1,0 +1,9 @@
+# Dependencies for twitch_bot.py (the !bet / Diplobucks Twitch chat bot),
+# a separate process from the core FastAPI referee - not installed in the
+# main Dockerfile/image, only needed when actually running the Twitch bot.
+#
+# Pinned to the 2.x line deliberately: twitchio 3.x is a breaking rewrite
+# (e.g. commands.Bot() requires a client_id and a different auth flow) that
+# twitch_bot.py is not written against - verify before upgrading.
+-r requirements.txt
+twitchio>=2.8.0,<3.0.0

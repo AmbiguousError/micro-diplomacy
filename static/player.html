@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Micro-Diplomacy | Human Command Deck</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom Scrollbar for Chat */
+    .chat-scroll::-webkit-scrollbar { width: 6px; }
+    .chat-scroll::-webkit-scrollbar-track { background: #0f172a; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen p-6 flex flex-col">
+
+  <!-- Header: Game Status & Phase -->
+  <header class="flex justify-between items-end border-b border-slate-800 pb-4 mb-6">
+    <div>
+      <h1 class="text-3xl font-black uppercase tracking-wider text-white">Command Deck</h1>
+      <p class="text-slate-400 text-sm mt-1">Human-in-the-Loop Tactical Interface</p>
+    </div>
+    <div class="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner">
+      <div class="text-center px-4 border-r border-slate-700">
+        <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Turn</span>
+        <span class="text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
+      </div>
+      <div class="text-center px-4 border-r border-slate-700">
+        <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Phase</span>
+        <span class="text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
+      </div>
+      <div class="text-center px-4">
+        <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Time Remaining</span>
+        <span class="text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:45</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1">
+    
+    <!-- LEFT COLUMN: DIPLOMACY & COMMUNICTIONS -->
+    <section class="flex flex-col gap-4 h-[70vh]">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+        
+        <!-- Chat Header -->
+        <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Encrypted Comms Link</h2>
+          <span class="flex items-center gap-2 text-xs font-mono text-emerald-400">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live
+          </span>
+        </div>
+
+        <!-- Chat History -->
+        <div class="flex-1 p-4 overflow-y-auto chat-scroll space-y-4" id="chatHistory">
+          <div class="text-xs text-slate-500 italic text-center">-- Secure Channel Established --</div>
+          <!-- Messages will be injected here -->
+        </div>
+
+        <!-- Message Input -->
+        <div class="p-4 bg-slate-950 border-t border-slate-800 flex gap-3">
+          <select id="recipientSelect" class="bg-slate-900 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 outline-none focus:border-indigo-500 transition">
+            <option value="PUBLIC">PUBLIC</option>
+            <option value="Red" class="text-red-400 font-bold">Red Faction</option>
+            <option value="Blue" class="text-blue-400 font-bold">Blue Faction</option>
+            <option value="Green" class="text-green-400 font-bold">Green Faction</option>
+            <option value="Yellow" class="text-yellow-400 font-bold">Yellow Faction</option>
+          </select>
+          <input type="text" id="messageInput" placeholder="Draft diplomatic proposal or bluff..." class="flex-1 bg-slate-900 border border-slate-700 text-sm rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 transition" autocomplete="off">
+          <button onclick="sendMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded-lg text-sm transition shadow-lg shadow-indigo-600/20">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: TACTICAL ORDERS -->
+    <section class="flex flex-col gap-4 h-[70vh]">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+        
+        <!-- Orders Header -->
+        <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Unit Command Terminal</h2>
+          <span class="text-xs font-mono text-slate-500" id="ownedUnitsCount">0 Units Active</span>
+        </div>
+
+        <!-- Orders Form -->
+        <div class="flex-1 p-4 overflow-y-auto space-y-4" id="ordersContainer">
+          <div class="text-xs text-slate-500 italic text-center mt-10">Awaiting Orders Phase...</div>
+          <!-- Order blocks injected here based on controlled territories -->
+        </div>
+
+        <!-- Submit Button -->
+        <div class="p-4 bg-slate-950 border-t border-slate-800">
+          <button id="submitOrdersBtn" onclick="submitOrders()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest py-4 rounded-xl text-sm transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+            Lock In Orders
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // Placeholder Client Logic (To be hooked up to your FastAPI REST/WS endpoints)
+    let myFaction = "Red"; // Assigned upon joining
+    const API_BASE = "/api/v1/games/game_1001"; 
+
+    function appendMessage(sender, recipient, content) {
+      const chat = document.getElementById('chatHistory');
+      const msgDiv = document.createElement('div');
+      const isMe = sender === myFaction;
+      
+      msgDiv.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+      msgDiv.innerHTML = `
+        <span class="text-[10px] font-mono text-slate-500 mb-1">${sender} -> ${recipient}</span>
+        <div class="px-4 py-2 rounded-2xl text-sm max-w-[80%] ${isMe ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-slate-700'}">
+          ${content}
+        </div>
+      `;
+      chat.appendChild(msgDiv);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const recipient = document.getElementById('recipientSelect').value;
+      const content = input.value.trim();
+      
+      if (!content) return;
+      
+      // OPTIONAL: Wire up to fetch API
+      /*
+      fetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${myFaction}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient, content })
+      });
+      */
+      
+      appendMessage(myFaction, recipient, content);
+      input.value = '';
+    }
+
+    // Allow 'Enter' key to send message
+    document.getElementById('messageInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    function submitOrders() {
+      const btn = document.getElementById('submitOrdersBtn');
+      btn.innerText = "ORDERS TRANSMITTED";
+      btn.classList.replace('bg-emerald-600', 'bg-slate-600');
+      btn.disabled = true;
+      
+      // Logic to parse the #ordersContainer dropdowns and POST to server goes here
+    }
+  </script>
+</body>
+</html>

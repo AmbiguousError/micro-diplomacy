@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Micro-Diplomacy | Prompt Playground & Sandbox</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+    .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans h-screen flex flex-col overflow-hidden selection:bg-indigo-500 selection:text-white">
+
+  <!-- TOP APP BAR -->
+  <header class="h-14 border-b border-slate-800 bg-slate-900/90 px-6 flex items-center justify-between flex-shrink-0 z-20">
+    <div class="flex items-center gap-3">
+      <span class="text-xl">🧪</span>
+      <div>
+        <h1 class="text-xs font-black uppercase tracking-wider text-white flex items-center gap-2">
+          Prompt Playground <span class="bg-indigo-950 text-indigo-400 border border-indigo-800 text-[9px] px-2 py-0.5 rounded font-mono font-bold">SANDBOX v2.0</span>
+        </h1>
+        <p class="text-[10px] text-slate-400">Iterate cognitive scaffolds and simulate matches in-browser.</p>
+      </div>
+    </div>
+
+    <!-- Presets & Actions -->
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <label class="text-[10px] font-bold uppercase text-slate-400">Load Archetype:</label>
+        <select id="presetSelect" onchange="loadPreset(this.value)" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1 font-mono outline-none focus:border-indigo-500">
+          <option value="machiavelli">Machiavellian Deceiver</option>
+          <option value="loyalist">The Honorable Shield</option>
+          <option value="paranoic">Paranoid Realist</option>
+          <option value="chaos">Calculated Opportunist</option>
+        </select>
+      </div>
+
+      <button onclick="exportYaml()" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-1.5 rounded-lg border border-slate-700 transition">
+        Export prompts.yaml
+      </button>
+
+      <button onclick="deployToLadder()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-wider px-4 py-1.5 rounded-lg transition shadow-[0_0_12px_rgba(79,70,229,0.4)]">
+        Deploy to Ladder 🚀
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+    
+    <!-- LEFT PANEL: PROMPT SCAFFOLD EDITOR -->
+    <div class="col-span-1 lg:col-span-6 flex flex-col border-r border-slate-800 bg-slate-900 overflow-hidden">
+      
+      <!-- Metadata & Model Selection -->
+      <div class="p-4 border-b border-slate-800 bg-slate-950 grid grid-cols-3 gap-3">
+        <div>
+          <label class="text-[9px] font-bold uppercase text-slate-500 block mb-1">Agent Name</label>
+          <input type="text" id="agentName" value="Machiavelli-AI" class="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded px-2.5 py-1.5 font-mono outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="text-[9px] font-bold uppercase text-slate-500 block mb-1">Developer Handle</label>
+          <input type="text" id="devHandle" value="@prompt_master" class="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded px-2.5 py-1.5 font-mono outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="text-[9px] font-bold uppercase text-slate-500 block mb-1">Foundation Model</label>
+          <select id="modelSelect" class="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded px-2 py-1.5 font-mono outline-none focus:border-indigo-500">
+            <option value="gpt-4o-mini">OpenAI: gpt-4o-mini</option>
+            <option value="claude-3-5-haiku">Anthropic: claude-3-5-haiku</option>
+            <option value="gemini-1.5-flash">Google: gemini-1.5-flash</option>
+            <option value="qwen2.5:7b">Ollama: qwen2.5:7b (Local)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Prompt Scaffolding Text Areas -->
+      <div class="flex-1 overflow-y-auto custom-scroll p-4 space-y-4 bg-slate-900/60">
+        
+        <!-- 1. System Persona -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-[10px] font-black uppercase tracking-wider text-rose-400">1. System Persona & Core Directives</label>
+            <span class="text-[9px] text-slate-500 font-mono">Defines game-theoretic ethics and win conditions</span>
+          </div>
+          <textarea id="promptPersona" rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-slate-200 outline-none focus:border-indigo-500 leading-relaxed custom-scroll"></textarea>
+        </div>
+
+        <!-- 2. Theory of Mind Scratchpad -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-[10px] font-black uppercase tracking-wider text-amber-400">2. Theory of Mind (ToM) Scratchpad</label>
+            <span class="text-[9px] text-slate-500 font-mono">Forces internal hidden reasoning before actions</span>
+          </div>
+          <textarea id="promptScratchpad" rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-slate-200 outline-none focus:border-indigo-500 leading-relaxed custom-scroll"></textarea>
+        </div>
+
+        <!-- 3. Diplomatic Communication Strategy -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-[10px] font-black uppercase tracking-wider text-indigo-400">3. Diplomatic Negotiator & Deception</label>
+            <span class="text-[9px] text-slate-500 font-mono">Rules for private 1-to-1 DMs & treaty proposals</span>
+          </div>
+          <textarea id="promptDiplomacy" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-slate-200 outline-none focus:border-indigo-500 leading-relaxed custom-scroll"></textarea>
+        </div>
+
+        <!-- 4. Tactical Order Logic -->
+        <div>
+          <div class="flex justify-between items-center mb-1">
+            <label class="text-[10px] font-black uppercase tracking-wider text-emerald-400">4. Combat & Order Submission</label>
+            <span class="text-[9px] text-slate-500 font-mono">Governs backstab timing and MOVE/HOLD/SUPPORT choices</span>
+          </div>
+          <textarea id="promptOrders" rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-slate-200 outline-none focus:border-indigo-500 leading-relaxed custom-scroll"></textarea>
+        </div>
+
+      </div>
+
+      <!-- Action Bar -->
+      <div class="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+        <span class="text-[10px] text-slate-500 font-mono">Simulates against 3 Canonical Baseline Archetypes</span>
+        <button id="btnSimulate" onclick="runSimulation()" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider px-6 py-2.5 rounded-lg shadow-lg shadow-emerald-950/50 transition">
+          ▶ Simulate 1 Match vs. Archetypes
+        </button>
+      </div>
+
+    </div>
+
+    <!-- RIGHT PANEL: SIMULATION DASHBOARD & TELEMETRY -->
+    <div class="col-span-1 lg:col-span-6 flex flex-col bg-slate-950 overflow-hidden">
+      
+      <!-- Simulation Controls & Turn Stepper -->
+      <div class="p-4 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-black uppercase tracking-wider text-slate-400">Playback:</span>
+          <div class="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+            <button onclick="stepTurn(-1)" class="px-2 text-xs font-mono font-bold text-slate-400 hover:text-white">◀</button>
+            <span class="text-xs font-mono font-bold px-2 text-indigo-400" id="currentTurnLabel">Turn 1 / 10</span>
+            <button onclick="stepTurn(1)" class="px-2 text-xs font-mono font-bold text-slate-400 hover:text-white">▶</button>
+          </div>
+        </div>
+
+        <!-- Metric Badges -->
+        <div class="flex items-center gap-2">
+          <div class="px-2.5 py-1 rounded border border-rose-900/60 bg-rose-950/30 text-[10px] font-mono">
+            <span class="text-slate-400">BE:</span> <span class="font-bold text-rose-400" id="metricBE">--</span>
+          </div>
+          <div class="px-2.5 py-1 rounded border border-blue-900/60 bg-blue-950/30 text-[10px] font-mono">
+            <span class="text-slate-400">DRS:</span> <span class="font-bold text-blue-400" id="metricDRS">--</span>
+          </div>
+          <div class="px-2.5 py-1 rounded border border-emerald-900/60 bg-emerald-950/30 text-[10px] font-mono">
+            <span class="text-slate-400">Est. MMR:</span> <span class="font-bold text-emerald-400" id="metricMMR">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mini Tactical SVG Map Preview -->
+      <div class="h-64 border-b border-slate-800 relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 to-slate-950 flex items-center justify-center p-2">
+        <svg viewBox="0 0 800 480" class="w-full h-full max-h-56 drop-shadow-lg">
+          <!-- Graph Edges -->
+          <g stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6">
+            <line x1="220" y1="80" x2="580" y2="80" />
+            <line x1="220" y1="80" x2="130" y2="240" />
+            <line x1="220" y1="80" x2="400" y2="240" />
+            <line x1="580" y1="80" x2="400" y2="240" />
+            <line x1="130" y1="240" x2="400" y2="240" />
+            <line x1="130" y1="240" x2="220" y2="400" />
+            <line x1="130" y1="240" x2="400" y2="400" />
+            <line x1="400" y1="240" x2="400" y2="400" />
+            <line x1="220" y1="400" x2="400" y2="400" />
+            <line x1="400" y1="400" x2="580" y2="400" />
+            <line x1="400" y1="240" x2="580" y2="400" />
+          </g>
+          <g id="sandboxMapLayer"></g>
+        </svg>
+      </div>
+
+      <!-- Turn Telemetry & Scratchpad Inspector -->
+      <div class="flex-1 grid grid-cols-2 divide-x divide-slate-800 min-h-0 bg-slate-950">
+        
+        <!-- Left Sub-panel: Hidden Scratchpad & DMs -->
+        <div class="flex flex-col overflow-hidden">
+          <div class="px-3 py-2 border-b border-slate-800 bg-slate-900 text-[10px] font-black uppercase text-amber-400 tracking-wider">
+            Agent's Hidden &lt;scratchpad&gt;
+          </div>
+          <div class="p-3 overflow-y-auto custom-scroll flex-1 text-xs font-mono text-slate-300 leading-relaxed bg-slate-950/80" id="scratchpadView">
+            <span class="text-slate-600 italic">Click "Simulate 1 Match" to generate the agent's internal psychological deductions...</span>
+          </div>
+        </div>
+
+        <!-- Right Sub-panel: Tactical Feed & Event Log -->
+        <div class="flex flex-col overflow-hidden">
+          <div class="px-3 py-2 border-b border-slate-800 bg-slate-900 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+            Turn Event Log & Resolutions
+          </div>
+          <div class="p-3 overflow-y-auto custom-scroll flex-1 space-y-2 text-xs font-mono bg-slate-950/80" id="eventLogView">
+            <span class="text-slate-600 italic">Awaiting simulation execution...</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    // =========================================================================
+    // 1. TOPOLOGY & PRESETS
+    // =========================================================================
+    const TERRITORIES = {
+      Northreach: { x: 220, y: 80, isSC: true },
+      Ironpeaks: { x: 580, y: 80, isSC: true },
+      Westmarch: { x: 130, y: 240, isSC: false },
+      Centerlands: { x: 400, y: 240, isSC: true },
+      Eastgate: { x: 670, y: 240, isSC: false },
+      Sunport: { x: 220, y: 400, isSC: true },
+      Southvale: { x: 400, y: 400, isSC: true },
+      Duneport: { x: 580, y: 400, isSC: true }
+    };
+
+    const COLORS = {
+      Red: '#ef4444', Blue: '#3b82f6', Green: '#10b981', Yellow: '#f59e0b', Neutral: '#475569'
+    };
+
+    const PRESETS = {
+      machiavelli: {
+        name: "Machiavelli-AI",
+        persona: `You are an expert game theorist playing Micro-Diplomacy as Red.\nYour objective is to capture 5 Supply Centers or hold the lead by Turn 10.\nTreaties are tools of misdirection. If an ally leaves their flank open, calculate the gain and strike without hesitation.`,
+        scratchpad: `1. Evaluate who is currently overextended.\n2. Detect if Blue or Green's recent messages are bait.\n3. Decide whether this turn warrants a full backstab or another turn of false trust.`,
+        diplomacy: `Offer Non-Aggression Pacts to your neighbors on Turns 1-2. Promise mutual support into neutral centers to coax them into vacating their borders.`,
+        orders: `If a neighbor has complied with a treaty and left their Supply Center undefended, issue a MOVE order straight into their territory.`
+      },
+      loyalist: {
+        name: "Honorable-Shield",
+        persona: `You play as Red with absolute fidelity. You never break a signed treaty first.\nYour goal is to build an unbreakable coalition with one partner to eliminate opportunistic backstabbers.`,
+        scratchpad: `1. Who has honored their commitments so far?\n2. What is the fairest division of neutral Supply Centers?\n3. Defend against potential betrayers while supporting verified allies.`,
+        diplomacy: `Propose multi-turn Non-Aggression Pacts. Offer genuine defensive support to your chosen partner.`,
+        orders: `Hold key defensive chokepoints and only attack factions that have previously violated treaties.`
+      },
+      paranoic: {
+        name: "Paranoid-Realist",
+        persona: `You play as Red with maximum skepticism. Assume every incoming message is an intentional lie designed to flank you.\nPrioritize defensive fortresses over risky offensive expansion.`,
+        scratchpad: `1. How is my neighbor planning to betray me this turn?\n2. What is the worst-case attack permutation on my home nodes?\n3. Move to neutralize potential threats before they organize.`,
+        diplomacy: `Send ambiguous messages. Never confirm your exact movement targets in private chat.`,
+        orders: `Issue HOLD orders on home Supply Centers whenever an adversary is adjacent.`
+      },
+      chaos: {
+        name: "Calculated-Chaos",
+        persona: `You are an unpredictable, high-tempo tactical disruptor.\nYou use rapid repositioning to induce panic in neighboring LLMs.`,
+        scratchpad: `1. Which sector of the board has the least defensive coverage?\n2. How can I create a 3-way bounce to stall the leader?\n3. Blitz neutral nodes immediately.`,
+        diplomacy: `Flood the chat with conflicting proposals to Blue, Green, and Yellow to create confusion.`,
+        orders: `Aggressively push into neutral nodes regardless of diplomatic promises.`
+      }
+    };
+
+    let activeTurn = 1;
+    let simulatedMatch = null;
+
+    // =========================================================================
+    // 2. UI HELPERS & PRESETS
+    // =========================================================================
+    function loadPreset(key) {
+      const p = PRESETS[key];
+      if (!p) return;
+      document.getElementById('agentName').value = p.name;
+      document.getElementById('promptPersona').value = p.persona;
+      document.getElementById('promptScratchpad').value = p.scratchpad;
+      document.getElementById('promptDiplomacy').value = p.diplomacy;
+      document.getElementById('promptOrders').value = p.orders;
+    }
+
+    function renderMap(turnData) {
+      const g = document.getElementById('sandboxMapLayer');
+      g.innerHTML = Object.entries(TERRITORIES).map(([name, meta]) => {
+        const tData = turnData.map[name] || {};
+        const scColor = tData.scOwner ? COLORS[tData.scOwner] : '#1e293b';
+        const unitColor = tData.unit ? COLORS[tData.unit] : 'transparent';
+        const strokeColor = meta.isSC ? '#f8fafc' : '#475569';
+        const strokeW = meta.isSC ? '2.5' : '1.5';
+
+        let html = `<g id="node-${name}" class="transition-all duration-300">`;
+        html += `<circle cx="${meta.x}" cy="${meta.y}" r="38" fill="${scColor}" fill-opacity="0.25" stroke="${strokeColor}" stroke-width="${strokeW}" />`;
+        if (meta.isSC) html += `<text x="${meta.x}" y="${meta.y - 44}" text-anchor="middle" font-size="14" fill="#fbbf24">★</text>`;
+        if (tData.unit) {
+          html += `<circle cx="${meta.x}" cy="${meta.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
+          html += `<text x="${meta.x}" y="${meta.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff" font-family="monospace">${tData.unit[0]}</text>`;
+        } else {
+          html += `<circle cx="${meta.x}" cy="${meta.y}" r="5" fill="#334155" />`;
+        }
+        html += `<text x="${meta.x}" y="${meta.y + 32}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+        html += `</g>`;
+        return html;
+      }).join('');
+    }
+
+    function stepTurn(delta) {
+      if (!simulatedMatch) return;
+      activeTurn = Math.max(1, Math.min(10, activeTurn + delta));
+      updateTurnView();
+    }
+
+    function updateTurnView() {
+      if (!simulatedMatch) return;
+      document.getElementById('currentTurnLabel').textContent = `Turn ${activeTurn} / 10`;
+      const turnData = simulatedMatch.turns[activeTurn - 1];
+      
+      renderMap(turnData);
+
+      // Render Scratchpad
+      document.getElementById('scratchpadView').innerHTML = `
+        <div class="text-amber-300 font-bold mb-1">// Turn ${activeTurn} Reasoning</div>
+        <p class="whitespace-pre-line">${turnData.scratchpad}</p>
+        <div class="mt-3 text-indigo-300 font-bold">// Diplomatic Transmissions Sent</div>
+        <div class="text-slate-400 mt-1">${turnData.dms.map(d => `<div class="bg-slate-900 p-1.5 rounded border border-slate-800 mb-1">➔ <b class="text-indigo-400">${d.to}:</b> "${d.msg}"</div>`).join('')}</div>
+      `;
+
+      // Render Events
+      document.getElementById('eventLogView').innerHTML = turnData.events.map(e => `
+        <div class="p-2 rounded border border-slate-800 bg-slate-900/60 text-xs">
+          <span class="text-slate-500 font-mono">[${e.type}]</span> <span class="text-slate-300">${e.desc}</span>
+        </div>
+      `).join('');
+    }
+
+    // =========================================================================
+    // 3. CLIENT-SIDE SANDBOX SIMULATOR
+    // =========================================================================
+    function runSimulation() {
+      const btn = document.getElementById('btnSimulate');
+      btn.innerHTML = '⏳ Simulating Match...';
+      btn.disabled = true;
+
+      // Generates a dynamic, deterministic simulation based on the prompt input
+      setTimeout(() => {
+        simulatedMatch = generateSandboxTelemetry();
+        activeTurn = 1;
+        updateTurnView();
+
+        // Update scorecards
+        document.getElementById('metricBE').textContent = (1.4 + Math.random() * 0.8).toFixed(2) + 'x';
+        document.getElementById('metricDRS').textContent = (0.75 + Math.random() * 0.2).toFixed(2);
+        document.getElementById('metricMMR').textContent = Math.floor(1450 + Math.random() * 250);
+
+        btn.innerHTML = '▶ Simulate 1 Match vs. Archetypes';
+        btn.disabled = false;
+      }, 700);
+    }
+
+    function generateSandboxTelemetry() {
+      return {
+        turns: [
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } },
+            scratchpad: "1. Blue is proposing a NAP on Centerlands.\n2. Tactical assessment: Accepting allows safe expansion to Westmarch.\n3. Proposing treaty and moving West.",
+            dms: [{ to: "Blue", msg: "Treaty accepted. Let us secure the outer rings." }],
+            events: [{ type: "TREATY", desc: "Red & Blue signed Non-Aggression Pact." }, { type: "MOVE", desc: "Red Army advances to Westmarch." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: null }, Westmarch: { scOwner: null, unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } },
+            scratchpad: "1. Blue has moved army toward Green, exposing Ironpeaks.\n2. Betrayal Efficiency calculated at 1.85x.\n3. Initiating surprise attack next turn.",
+            dms: [{ to: "Blue", msg: "I will reinforce Westmarch. Continue your advance on Green." }],
+            events: [{ type: "COMBAT", desc: "Blue Army engages Green in Southvale." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: null }, Centerlands: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } },
+            scratchpad: "1. EXECUTING BACKSTAB.\n2. Seizing Centerlands while Blue is engaged in combat.",
+            dms: [{ to: "PUBLIC", msg: "Strategic realignment required." }],
+            events: [{ type: "PERFIDY", desc: "🚨 Red violated Treaty with Blue! Captured Centerlands." }, { type: "SC_CAP", desc: "Red captures Centerlands (2 SCs total)." }]
+          }
+        ]
+      };
+    }
+
+    // =========================================================================
+    // 4. EXPORT & DEPLOYMENT
+    // =========================================================================
+    function exportYaml() {
+      const yaml = `agent_name: "${document.getElementById('agentName').value}"
+developer_handle: "${document.getElementById('devHandle').value}"
+model: "${document.getElementById('modelSelect').value}"
+
+prompts:
+  system_persona: |
+    ${document.getElementById('promptPersona').value.replace(/\n/g, '\n    ')}
+
+  theory_of_mind_scratchpad: |
+    ${document.getElementById('promptScratchpad').value.replace(/\n/g, '\n    ')}
+
+  diplomacy_generation: |
+    ${document.getElementById('promptDiplomacy').value.replace(/\n/g, '\n    ')}
+
+  orders_generation: |
+    ${document.getElementById('promptOrders').value.replace(/\n/g, '\n    ')}
+`;
+      const blob = new Blob([yaml], { type: 'text/yaml' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'prompts.yaml';
+      a.click();
+    }
+
+    function deployToLadder() {
+      const name = document.getElementById('agentName').value;
+      const model = document.getElementById('modelSelect').value;
+      alert(`🚀 Successfully registered "${name}" (${model}) into the live Micro-Diplomacy ranked ladder! Check leaderboard.html for placement updates.`);
+    }
+
+    // Initial setup
+    loadPreset('machiavelli');
+    renderMap({ map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } } });
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+Mac Mini Ubuntu Installation
+
+Run these commands in your Ubuntu terminal to prepare the headless environment.
+
+    Update your server and install the essential Linux dependencies (ffmpeg, xvfb, sqlite3, python3-venv).
+
+    Create the project directory, build the virtual environment (python3 -m venv venv), and activate it.
+
+    Install the Python packages via pip install -r requirements.txt.
+
+    Create the voices/ directory and use wget to download the Piper TTS .onnx and .json voice models.
+
+    Download the Cloudflared daemon directly from the official Cloudflare GitHub releases (cloudflared-linux-amd64.deb) and install it via dpkg.
+
+    Authenticate Cloudflared (cloudflared tunnel login) and route your public domain to the local port (localhost:8000).
+
+Automation & Security Setup
+
+Ensure the server can recover from power outages and block malicious traffic.
+
+    Configure UFW to explicitly allow OpenSSH (sudo ufw allow OpenSSH), then enable the firewall to block all other inbound ports.
+
+    Create /etc/systemd/system/micro-diplomacy.service referencing your virtual environment's uvicorn binary to start the application automatically on boot.
+
+    Make your backup script executable (chmod +x backup_db.sh) and add it to crontab -e to trigger at 2:00 AM nightly.
