@@ -143,7 +143,19 @@ class Adjudicator:
                 )
                 holds[terr] = (faction, 1 + support_bonus)
 
-        surviving_units: Dict[str, str] = {}
+        # Two separate maps, merged after the loop below, rather than one
+        # shared dict written from both "sides" of a resolution: dest_occupant
+        # says who wins a territory as an attack/hold target; origin_bounce_back
+        # says which failed attacker tries to return to the territory it left.
+        # A single shared dict let a later iteration's bounce-back silently
+        # overwrite an earlier iteration's legitimate dest_occupant result for
+        # the same territory (e.g. a unit's home being captured by a third
+        # party the same turn it attacks elsewhere and fails), erasing the
+        # successful mover with no elimination event logged. Merging with
+        # dest_occupant taking priority matches standard Diplomacy: a failed
+        # attacker only returns home if nothing else took that square.
+        dest_occupant: Dict[str, str] = {}
+        origin_bounce_back: Dict[str, str] = {}
 
         for dest in ADJACENCY:
             attacks = incoming_attacks[dest]
@@ -151,7 +163,7 @@ class Adjudicator:
 
             if not attacks:
                 if has_holder:
-                    surviving_units[dest] = holds[dest][0]
+                    dest_occupant[dest] = holds[dest][0]
                 continue
 
             attacks.sort(key=lambda x: x[2], reverse=True)
@@ -161,9 +173,9 @@ class Adjudicator:
             if len(tied_attacks) > 1:
                 events.append(f"Attack bounce at {dest}: Multiple forces collided with strength {max_attack_str}.")
                 if has_holder:
-                    surviving_units[dest] = holds[dest][0]
-                for atk_terr, _, _ in attacks:
-                    surviving_units[atk_terr] = active_orders[atk_terr][0]
+                    dest_occupant[dest] = holds[dest][0]
+                for atk_terr, atk_faction, _ in attacks:
+                    origin_bounce_back[atk_terr] = atk_faction
                 continue
 
             winner_terr, winner_faction, win_str = attacks[0]
@@ -177,8 +189,8 @@ class Adjudicator:
                         if win_str <= opp_str:
                             head_to_head_fail = True
                             events.append(f"Head-to-head bounce between {winner_terr} and {dest}.")
-                            surviving_units[winner_terr] = winner_faction
-                            surviving_units[dest] = active_orders[dest][0]
+                            origin_bounce_back[winner_terr] = winner_faction
+                            origin_bounce_back[dest] = active_orders[dest][0]
 
             if head_to_head_fail:
                 continue
@@ -187,14 +199,23 @@ class Adjudicator:
                 def_faction, def_str = holds[dest]
                 if win_str > def_str:
                     events.append(f"{winner_faction} dislodged {def_faction} at {dest} ({win_str} vs {def_str}).")
-                    surviving_units[dest] = winner_faction
+                    dest_occupant[dest] = winner_faction
                 else:
                     events.append(f"{def_faction} held {dest} against {winner_faction} ({def_str} vs {win_str}).")
-                    surviving_units[dest] = def_faction
-                    surviving_units[winner_terr] = winner_faction
+                    dest_occupant[dest] = def_faction
+                    origin_bounce_back[winner_terr] = winner_faction
             else:
                 events.append(f"{winner_faction} moved from {winner_terr} to {dest} successfully.")
-                surviving_units[dest] = winner_faction
+                dest_occupant[dest] = winner_faction
+
+        surviving_units: Dict[str, str] = dict(dest_occupant)
+        for origin_terr, faction in origin_bounce_back.items():
+            if origin_terr in surviving_units:
+                events.append(
+                    f"{faction} was eliminated: home territory {origin_terr} was captured while its unit was away attacking."
+                )
+            else:
+                surviving_units[origin_terr] = faction
 
         for terr, faction in surviving_units.items():
             new_map[terr].unit_faction = faction
