@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from .db import init_db, load_all_game_states, save_game_state
+from .gauntlet_router import router as gauntlet_router
 from .mcts import Adjudicator, FACTIONS, Order, Phase, STARTING_POSITIONS, SUPPLY_CENTERS, TerritoryState, GameState, ADJACENCY
 
 # =====================================================================
@@ -132,6 +134,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="Micro-Diplomacy Server", version="1.0", lifespan=lifespan)
+app.include_router(gauntlet_router)
 
 def authenticate_agent(authorization: Optional[str] = Header(None)) -> str:
     if not authorization or not authorization.startswith("Bearer "):
@@ -215,3 +218,10 @@ async def submit_orders(game_id: str, payload: Dict[str, List[Order]], faction: 
     game.orders[agent_faction] = orders
     await save_game_state(game_id, game.to_state())
     return {"status": "ACCEPTED", "turn": game.turn, "order_count": len(orders)}
+
+# Mounted last so it only catches paths none of the /api/v1/... routes above
+# matched - e.g. GET /spectator.html or / (index.html). Root-mounted (not
+# under /static) to match streamer.sh's hardcoded
+# http://localhost:8000/spectator.html and player.html's root-relative
+# API_BASE fetches.
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
