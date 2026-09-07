@@ -1,7 +1,11 @@
 """
 Autonomous LLM Agent Runner for Micro-Diplomacy
 Framework: OpenAI API + HTTPX
-Run: python agent.py --game-id game_1001 --faction Red --api-key sk-...
+Run: python agent.py --agent-name MyBot --developer-handle you --openai-key sk-...
+
+Registers with the referee, joins the matchmaking queue, and blocks until
+matched - game_id and faction are assigned by the server's matchmaker, not
+chosen on the command line (see app/server_hub.py).
 """
 
 import argparse
@@ -111,15 +115,56 @@ ORDER_TOOL = [
 ]
 
 class MicroDiplomacyAgent:
-    def __init__(self, base_url: str, game_id: str, faction: str, openai_api_key: str, model: str = "gpt-4o"):
+    def __init__(
+        self,
+        base_url: str,
+        openai_api_key: str,
+        agent_name: str,
+        developer_handle: str,
+        model_identifier: str = "custom-model",
+        model: str = "gpt-4o",
+    ):
         self.base_url = base_url.rstrip("/")
-        self.game_id = game_id
-        self.faction = faction
+        self.agent_name = agent_name
+        self.developer_handle = developer_handle
+        self.model_identifier = model_identifier
         self.model = model
         self.client = OpenAI(api_key=openai_api_key)
-        self.http = httpx.Client(headers={"Authorization": f"Bearer {self.faction}"}, timeout=15.0)
+        self.http = httpx.Client(timeout=15.0)  # Authorization header set once registered, see register_and_queue()
+        self.game_id: Optional[str] = None
+        self.faction: Optional[str] = None
         self.last_diplomacy_turn_handled = 0
         self.last_orders_turn_handled = 0
+
+    def register_and_queue(self, poll_interval: float = 2.0) -> None:
+        """Registers this agent, joins matchmaking, and blocks until matched."""
+        resp = self.http.post(
+            f"{self.base_url}/api/v1/agents/register",
+            json={
+                "agent_name": self.agent_name,
+                "developer_handle": self.developer_handle,
+                "model_identifier": self.model_identifier,
+            },
+        )
+        resp.raise_for_status()
+        record = resp.json()
+        self.http.headers["Authorization"] = f"Bearer {record['api_key']}"
+        print(f"Registered as {record['agent_id']} ({self.agent_name})")
+
+        resp = self.http.post(f"{self.base_url}/api/v1/queue/join")
+        resp.raise_for_status()
+        queue_status = resp.json()
+
+        while queue_status["status"] != "MATCH_FOUND":
+            print(f"Queued (position {queue_status.get('queue_position')})... waiting for a match")
+            time.sleep(poll_interval)
+            resp = self.http.get(f"{self.base_url}/api/v1/queue/status")
+            resp.raise_for_status()
+            queue_status = resp.json()
+
+        self.game_id = queue_status["game_id"]
+        self.faction = queue_status["assigned_faction"]
+        print(f"Matched! Playing {self.faction} in {self.game_id}")
 
     def get_game_state(self) -> Dict[str, Any]:
         resp = self.http.get(f"{self.base_url}/api/v1/games/{self.game_id}/state")
@@ -218,6 +263,8 @@ class MicroDiplomacyAgent:
         self.last_orders_turn_handled = turn
 
     def run(self, poll_interval: float = 3.0) -> None:
+        if not self.game_id:
+            self.register_and_queue()
         print(f"Agent started for faction: {self.faction} on {self.game_id}")
         while True:
             try:
@@ -244,11 +291,14 @@ class MicroDiplomacyAgent:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Micro-Diplomacy LLM Agent Runner")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
-    parser.add_argument("--game-id", required=True)
-    parser.add_argument("--faction", required=True, choices=["Red", "Blue", "Green", "Yellow"])
-    parser.add_argument("--api-key", required=True)
-    parser.add_argument("--model", default="gpt-4o")
+    parser.add_argument("--agent-name", required=True, help="3-32 chars, shown on the leaderboard")
+    parser.add_argument("--developer-handle", required=True, help="2-32 chars")
+    parser.add_argument("--model-identifier", default="custom-model", help="Free-text label for the model powering this agent")
+    parser.add_argument("--openai-key", required=True, help="OpenAI API key used for this agent's own LLM calls")
+    parser.add_argument("--model", default="gpt-4o", help="OpenAI model to use for this agent's own LLM calls")
 
     args = parser.parse_args()
-    agent = MicroDiplomacyAgent(args.base_url, args.game_id, args.faction, args.api_key, args.model)
+    agent = MicroDiplomacyAgent(
+        args.base_url, args.openai_key, args.agent_name, args.developer_handle, args.model_identifier, args.model
+    )
     agent.run()

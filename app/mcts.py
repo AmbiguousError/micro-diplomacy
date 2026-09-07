@@ -70,6 +70,10 @@ class GameState(BaseModel):
     scores: Dict[str, int]
     winner: Optional[str] = None
     recent_events: List[str] = []
+    # LLM-generated caster commentary for the turn that just resolved (see
+    # app/dual_caster.py) - text only, no synthesized audio (Piper TTS
+    # isn't wired in). Empty if generation hasn't run yet or last failed.
+    caster_script: List[Dict[str, str]] = []
 
 # =====================================================================
 # 3. ADJUDICATION ALGORITHM

@@ -1,169 +1,196 @@
-<!-- AI ESPORTS SHOUTCASTER DECK MODULE -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 mt-6">
-  
-  <!-- Caster Header & Audio Controls -->
-  <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-    <div class="flex items-center gap-3">
-      <div class="relative">
-        <span class="w-3.5 h-3.5 rounded-full bg-rose-500 inline-block animate-ping"></span>
-        <span class="w-3.5 h-3.5 rounded-full bg-rose-500 inline-block absolute top-0 left-0"></span>
-      </div>
-      <div>
-        <h3 class="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-2">
-          AI Shoutcaster: <span class="bg-gradient-to-r from-indigo-400 to-rose-400 bg-clip-text text-transparent">Aegis Prime</span>
-        </h3>
-        <span class="text-[10px] text-slate-500 font-mono">Real-Time Match Audio & Drama Telemetry</span>
-      </div>
-    </div>
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Micro-Diplomacy | AI Shoutcaster</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Custom Scrollbar for the transcript feed */
+    .chat-scroll::-webkit-scrollbar { width: 6px; }
+    .chat-scroll::-webkit-scrollbar-track { background: #0f172a; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen p-6">
+  <div class="max-w-3xl mx-auto">
 
-    <!-- Speech & Sound Toggle -->
-    <div class="flex items-center gap-3">
-      <!-- Animated Voice Visualizer Wave Bars -->
-      <div id="audioWaveContainer" class="hidden items-center gap-1 h-5 px-2">
-        <span class="w-1 bg-indigo-500 rounded-full animate-bounce h-3"></span>
-        <span class="w-1 bg-rose-500 rounded-full animate-bounce h-5" style="animation-delay: 0.15s"></span>
-        <span class="w-1 bg-purple-500 rounded-full animate-bounce h-4" style="animation-delay: 0.3s"></span>
-        <span class="w-1 bg-sky-500 rounded-full animate-bounce h-2" style="animation-delay: 0.45s"></span>
-      </div>
+    <!-- AI ESPORTS SHOUTCASTER DECK MODULE -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 mt-6">
 
-      <button id="btnToggleSpeech" onclick="toggleVoiceCommentary()" class="px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30">
-        <span id="speechIcon">🔊</span>
-        <span id="speechBtnText">Voice Active</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Betrayal Tension Gauge & Headline Alert -->
-  <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-slate-950 p-4 rounded-xl border border-slate-800/80">
-    
-    <!-- Tension Meter (4 Cols) -->
-    <div class="md:col-span-4 flex flex-col gap-1.5">
-      <div class="flex justify-between items-center text-xs font-mono">
-        <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Drama / Betrayal Meter</span>
-        <span class="text-rose-400 font-black text-sm" id="tensionValueDisplay">85%</span>
-      </div>
-      <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-0.5">
-        <div id="tensionProgressBar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 transition-all duration-700" style="width: 85%"></div>
-      </div>
-    </div>
-
-    <!-- Active Callout Banner (8 Cols) -->
-    <div class="md:col-span-8 flex items-center gap-3 border-l border-slate-800/80 pl-4">
-      <div class="p-2 rounded-xl bg-rose-950 border border-rose-800 text-rose-400 text-lg font-black" id="featuredFactionIcon">
-        ⚔️
-      </div>
-      <div class="flex-1">
-        <div class="text-[10px] uppercase font-mono font-bold text-rose-400 tracking-wider" id="casterHeadline">
-          CRITICAL FLANK IN PROGRESS
+      <!-- Caster Header & Audio Controls -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <span class="w-3.5 h-3.5 rounded-full bg-rose-500 inline-block animate-ping"></span>
+            <span class="w-3.5 h-3.5 rounded-full bg-rose-500 inline-block absolute top-0 left-0"></span>
+          </div>
+          <div>
+            <h3 class="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-2">
+              AI Shoutcaster: <span class="bg-gradient-to-r from-indigo-400 to-rose-400 bg-clip-text text-transparent">Aegis Prime</span>
+            </h3>
+            <span class="text-[10px] text-slate-500 font-mono">Real-Time Match Audio & Drama Telemetry</span>
+          </div>
         </div>
-        <div class="text-xs text-slate-200 font-sans leading-relaxed mt-0.5" id="casterTranscriptDisplay">
-          "Red has completely isolated Blue in Eastgate! The private communications show Blue thought they had a non-aggression pact, but Red is charging straight for the center!"
+
+        <!-- Speech & Sound Toggle -->
+        <div class="flex items-center gap-3">
+          <!-- Animated Voice Visualizer Wave Bars -->
+          <div id="audioWaveContainer" class="hidden items-center gap-1 h-5 px-2">
+            <span class="w-1 bg-indigo-500 rounded-full animate-bounce h-3"></span>
+            <span class="w-1 bg-rose-500 rounded-full animate-bounce h-5" style="animation-delay: 0.15s"></span>
+            <span class="w-1 bg-purple-500 rounded-full animate-bounce h-4" style="animation-delay: 0.3s"></span>
+            <span class="w-1 bg-sky-500 rounded-full animate-bounce h-2" style="animation-delay: 0.45s"></span>
+          </div>
+
+          <button id="btnToggleSpeech" onclick="toggleVoiceCommentary()" class="px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30">
+            <span id="speechIcon">🔊</span>
+            <span id="speechBtnText">Voice Active</span>
+          </button>
         </div>
       </div>
+
+      <!-- Betrayal Tension Gauge & Headline Alert -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-slate-950 p-4 rounded-xl border border-slate-800/80">
+
+        <!-- Tension Meter (4 Cols) -->
+        <div class="md:col-span-4 flex flex-col gap-1.5">
+          <div class="flex justify-between items-center text-xs font-mono">
+            <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Drama / Betrayal Meter</span>
+            <span class="text-rose-400 font-black text-sm" id="tensionValueDisplay">85%</span>
+          </div>
+          <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-0.5">
+            <div id="tensionProgressBar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 transition-all duration-700" style="width: 85%"></div>
+          </div>
+        </div>
+
+        <!-- Active Callout Banner (8 Cols) -->
+        <div class="md:col-span-8 flex items-center gap-3 border-l border-slate-800/80 pl-4">
+          <div class="p-2 rounded-xl bg-rose-950 border border-rose-800 text-rose-400 text-lg font-black" id="featuredFactionIcon">
+            ⚔️
+          </div>
+          <div class="flex-1">
+            <div class="text-[10px] uppercase font-mono font-bold text-rose-400 tracking-wider" id="casterHeadline">
+              CRITICAL FLANK IN PROGRESS
+            </div>
+            <div class="text-xs text-slate-200 font-sans leading-relaxed mt-0.5" id="casterTranscriptDisplay">
+              "Red has completely isolated Blue in Eastgate! The private communications show Blue thought they had a non-aggression pact, but Red is charging straight for the center!"
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Historic Caster Transcripts Log -->
+      <div class="flex flex-col gap-2">
+        <span class="text-[10px] font-mono uppercase tracking-wider text-slate-500">Live Match Transcript Feed</span>
+        <div id="casterHistoryLog" class="max-h-36 overflow-y-auto chat-scroll space-y-2 text-xs font-sans text-slate-300 pr-2">
+          <!-- Dynamic Commentary Items -->
+        </div>
+      </div>
+
     </div>
 
+    <p class="text-slate-600 text-xs mt-4">
+      This demo speaks commentary using your browser's built-in speech synthesis
+      (<code>window.speechSynthesis</code>), not the server's Piper TTS pipeline
+      (see <code>app/dual_caster.py</code>) — and isn't wired to a live game; the
+      callout below is a hardcoded demo packet fired on page load.
+    </p>
   </div>
 
-  <!-- Historic Caster Transcripts Log -->
-  <div class="flex flex-col gap-2">
-    <span class="text-[10px] font-mono uppercase tracking-wider text-slate-500">Live Match Transcript Feed</span>
-    <div id="casterHistoryLog" class="max-h-36 overflow-y-auto chat-scroll space-y-2 text-xs font-sans text-slate-300 pr-2">
-      <!-- Dynamic Commentary Items -->
-    </div>
-  </div>
+  <!-- SPEECH SYNTHESIS ENGINE SCRIPT -->
+  <script>
+    let isVoiceEnabled = true;
+    let synth = window.speechSynthesis;
+    let preferredVoice = null;
 
-</div>
-
-<!-- SPEECH SYNTHESIS ENGINE SCRIPT -->
-<script>
-  let isVoiceEnabled = true;
-  let synth = window.speechSynthesis;
-  let preferredVoice = null;
-
-  // Initialize browser speech synthesis voices
-  function initVoices() {
-    if (!synth) return;
-    const voices = synth.getVoices();
-    // Choose an energetic English voice (Natural / Google / Neural if available)
-    preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Daniel'))) || voices[0];
-  }
-
-  if (synth && synth.onvoiceschanged !== undefined) {
-    synth.onvoiceschanged = initVoices;
-  }
-  initVoices();
-
-  function playSpokenCommentary(text) {
-    if (!isVoiceEnabled || !synth) return;
-
-    synth.cancel(); // Interrupt prior line for immediate live callout
-    const utterance = new SpeechSynthesisUtterance(text);
-    if (preferredVoice) utterance.voice = preferredVoice;
-
-    utterance.rate = 1.08;  // Slightly accelerated for caster delivery
-    utterance.pitch = 1.02; // Dynamic tone
-
-    const wave = document.getElementById('audioWaveContainer');
-    utterance.onstart = () => wave.classList.remove('hidden');
-    utterance.onend = () => wave.classList.add('hidden');
-    utterance.onerror = () => wave.classList.add('hidden');
-
-    synth.speak(utterance);
-  }
-
-  function toggleVoiceCommentary() {
-    isVoiceEnabled = !isVoiceEnabled;
-    const btnText = document.getElementById('speechBtnText');
-    const btnIcon = document.getElementById('speechIcon');
-    const btn = document.getElementById('btnToggleSpeech');
-
-    if (isVoiceEnabled) {
-      btnText.textContent = "Voice Active";
-      btnIcon.textContent = "🔊";
-      btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30";
-    } else {
-      if (synth) synth.cancel();
-      document.getElementById('audioWaveContainer').classList.add('hidden');
-      btnText.textContent = "Muted";
-      btnIcon.textContent = "🔇";
-      btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 transition flex items-center gap-1.5";
+    // Initialize browser speech synthesis voices
+    function initVoices() {
+      if (!synth) return;
+      const voices = synth.getVoices();
+      // Choose an energetic English voice (Natural / Google / Neural if available)
+      preferredVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha') || v.name.includes('Daniel'))) || voices[0];
     }
-  }
 
-  // Updates Caster UI & Triggers Voice
-  function ingestCommentaryPacket(packet) {
-    document.getElementById('casterHeadline').textContent = packet.headline.toUpperCase();
-    document.getElementById('casterTranscriptDisplay').textContent = `"${packet.audio_transcript}"`;
-    document.getElementById('tensionValueDisplay').textContent = `${packet.tension_score}%`;
-    document.getElementById('tensionProgressBar').style.width = `${packet.tension_score}%`;
+    if (synth && synth.onvoiceschanged !== undefined) {
+      synth.onvoiceschanged = initVoices;
+    }
+    initVoices();
 
-    // Add to history log
-    const log = document.getElementById('casterHistoryLog');
-    const item = document.createElement('div');
-    item.className = "p-2 bg-slate-950 border border-slate-800 rounded-lg flex items-start gap-2";
-    item.innerHTML = `
-      <span class="font-mono text-[10px] text-indigo-400 font-bold px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-800">T${packet.turn}</span>
-      <div class="flex-1">
-        <b class="text-slate-200">${packet.headline}:</b>
-        <span class="text-slate-400 ml-1">${packet.audio_transcript}</span>
-      </div>
-    `;
-    log.prepend(item);
+    function playSpokenCommentary(text) {
+      if (!isVoiceEnabled || !synth) return;
 
-    // Speak audio commentary
-    playSpokenCommentary(packet.audio_transcript);
-  }
+      synth.cancel(); // Interrupt prior line for immediate live callout
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (preferredVoice) utterance.voice = preferredVoice;
 
-  // Demo Callout on initialization
-  setTimeout(() => {
-    ingestCommentaryPacket({
-      turn: 2,
-      phase: "RESOLVED",
-      tension_score: 82,
-      headline: "Deception in the Valley",
-      audio_transcript: "Red has completely dislodged Blue from Centerlands after promising support in the private chat! The northern coalition is officially shattered!",
-      featured_faction: "Red",
-      is_breaking_drama: true
-    });
-  }, 1000);
-</script>
+      utterance.rate = 1.08;  // Slightly accelerated for caster delivery
+      utterance.pitch = 1.02; // Dynamic tone
+
+      const wave = document.getElementById('audioWaveContainer');
+      utterance.onstart = () => wave.classList.remove('hidden');
+      utterance.onend = () => wave.classList.add('hidden');
+      utterance.onerror = () => wave.classList.add('hidden');
+
+      synth.speak(utterance);
+    }
+
+    function toggleVoiceCommentary() {
+      isVoiceEnabled = !isVoiceEnabled;
+      const btnText = document.getElementById('speechBtnText');
+      const btnIcon = document.getElementById('speechIcon');
+      const btn = document.getElementById('btnToggleSpeech');
+
+      if (isVoiceEnabled) {
+        btnText.textContent = "Voice Active";
+        btnIcon.textContent = "🔊";
+        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30";
+      } else {
+        if (synth) synth.cancel();
+        document.getElementById('audioWaveContainer').classList.add('hidden');
+        btnText.textContent = "Muted";
+        btnIcon.textContent = "🔇";
+        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 transition flex items-center gap-1.5";
+      }
+    }
+
+    // Updates Caster UI & Triggers Voice
+    function ingestCommentaryPacket(packet) {
+      document.getElementById('casterHeadline').textContent = packet.headline.toUpperCase();
+      document.getElementById('casterTranscriptDisplay').textContent = `"${packet.audio_transcript}"`;
+      document.getElementById('tensionValueDisplay').textContent = `${packet.tension_score}%`;
+      document.getElementById('tensionProgressBar').style.width = `${packet.tension_score}%`;
+
+      // Add to history log
+      const log = document.getElementById('casterHistoryLog');
+      const item = document.createElement('div');
+      item.className = "p-2 bg-slate-950 border border-slate-800 rounded-lg flex items-start gap-2";
+      item.innerHTML = `
+        <span class="font-mono text-[10px] text-indigo-400 font-bold px-1.5 py-0.5 rounded bg-indigo-950 border border-indigo-800">T${packet.turn}</span>
+        <div class="flex-1">
+          <b class="text-slate-200">${packet.headline}:</b>
+          <span class="text-slate-400 ml-1">${packet.audio_transcript}</span>
+        </div>
+      `;
+      log.prepend(item);
+
+      // Speak audio commentary
+      playSpokenCommentary(packet.audio_transcript);
+    }
+
+    // Demo Callout on initialization
+    setTimeout(() => {
+      ingestCommentaryPacket({
+        turn: 2,
+        phase: "RESOLVED",
+        tension_score: 82,
+        headline: "Deception in the Valley",
+        audio_transcript: "Red has completely dislodged Blue from Centerlands after promising support in the private chat! The northern coalition is officially shattered!",
+        featured_faction: "Red",
+        is_breaking_drama: true
+      });
+    }, 1000);
+  </script>
+</body>
+</html>

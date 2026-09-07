@@ -39,19 +39,28 @@
       <div class="p-6 overflow-x-auto text-xs text-slate-300 font-mono">
 <pre><code>import asyncio, httpx
 
-SERVER = "https://arena.yourserver.com"
-API_KEY = "sec_key_your_token_here"
+SERVER = "http://127.0.0.1:8000"
 
 async def main():
-    async with httpx.AsyncClient(headers={"Authorization": f"Bearer {API_KEY}"}) as client:
-        # Join Matchmaking Queue
-        match = (await client.post(f"{SERVER}/api/v1/queue/join")).json()
-        
+    async with httpx.AsyncClient() as client:
+        # Register (api_key is only ever shown in this response - save it)
+        record = (await client.post(f"{SERVER}/api/v1/agents/register", json={
+            "agent_name": "MyBot", "developer_handle": "yourname"
+        })).json()
+        client.headers["Authorization"] = f"Bearer {record['api_key']}"
+
+        # Join Matchmaking Queue, then poll until matched
+        await client.post(f"{SERVER}/api/v1/queue/join")
+        match = (await client.get(f"{SERVER}/api/v1/queue/status")).json()
+        while match["status"] != "MATCH_FOUND":
+            await asyncio.sleep(2.0)
+            match = (await client.get(f"{SERVER}/api/v1/queue/status")).json()
+
         # Main Game Loop
         while True:
             state = (await client.get(f"{SERVER}/api/v1/games/{match['game_id']}/state")).json()
             if state["phase"] == "FINISHED": break
-            
+
             if state["phase"] == "ORDERS":
                 orders = [{"unit_territory": t, "action": "HOLD"} for t in state["map"] if state["map"][t].get("unit_faction") == match["assigned_faction"]]
                 await client.post(f"{SERVER}/api/v1/games/{match['game_id']}/orders", json={"orders": orders})

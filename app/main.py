@@ -2,10 +2,12 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from . import server_hub
 from .db import init_db, load_all_game_states, save_game_state
+from .dual_caster import DualShoutcasterService
 from .gauntlet_router import router as gauntlet_router
 from .mcts import Adjudicator, FACTIONS, Order, Phase, STARTING_POSITIONS, SUPPLY_CENTERS, TerritoryState, GameState, ADJACENCY
 
@@ -35,7 +37,8 @@ class GameSession:
         self.messages: List[Message] = []
         self.orders: Dict[str, List[Order]] = {f: [] for f in FACTIONS}
         self.recent_events: List[str] = ["Game started."]
-        
+        self.caster_script: List[Dict[str, str]] = []
+
         self.map: Dict[str, TerritoryState] = {
             t: TerritoryState(sc_owner=None, unit_faction=None) for t in ADJACENCY
         }
@@ -91,6 +94,7 @@ class GameSession:
             "messages": [m.model_dump() for m in self.messages],
             "orders": {f: [o.model_dump() for o in orders] for f, orders in self.orders.items()},
             "recent_events": self.recent_events,
+            "caster_script": self.caster_script,
             "map": {terr: ts.model_dump() for terr, ts in self.map.items()},
         }
 
@@ -102,6 +106,7 @@ class GameSession:
         self.winner = state.get("winner")
         self.messages = [Message(**m) for m in state.get("messages", [])]
         self.orders = {f: [Order(**o) for o in orders] for f, orders in state.get("orders", {}).items()}
+        self.caster_script = state.get("caster_script", [])
         self.recent_events = state.get("recent_events", [])
         self.map = {terr: TerritoryState(**ts) for terr, ts in state.get("map", {}).items()}
 
@@ -110,6 +115,26 @@ class GameSession:
 # =====================================================================
 
 games: Dict[str, GameSession] = {}
+caster_service = DualShoutcasterService()
+
+async def update_caster_script(game: GameSession) -> None:
+    """Generates this turn's caster commentary via an LLM call and stores it
+    on the session. Text only - there's no synthesized audio (Piper TTS
+    isn't wired in) and no push delivery (see GET .../state's caster_script
+    field instead). Any failure (no/invalid OPENAI_API_KEY, network error,
+    malformed LLM output) is caught here so a bad turn of commentary can
+    never break the actual game loop - it just leaves caster_script empty."""
+    try:
+        game.caster_script = await caster_service.generate_broadcast_script(
+            turn=game.turn,
+            combat=game.recent_events,
+            breaches=[],  # treaty breaches aren't wired into resolution yet - see TODO.md
+            state={"map": {t: s.model_dump() for t, s in game.map.items()}},
+            match_history_summary="",
+        )
+    except Exception as e:
+        print(f"[dual_caster] commentary generation failed: {e}")
+        game.caster_script = []
 
 async def game_loop(game_id: str):
     while True:
@@ -119,8 +144,20 @@ async def game_loop(game_id: str):
             break
         game.time_remaining -= 1
         if game.time_remaining <= 0:
+            was_orders_phase = game.phase == Phase.ORDERS
             game.step_phase()
+            if was_orders_phase:
+                await update_caster_script(game)
             await save_game_state(game_id, game.to_state())
+
+async def spawn_game(game_id: str) -> GameSession:
+    """Creates and persists a new GameSession, and starts its game_loop task.
+    Shared by the direct create-game endpoint and the matchmaker callback."""
+    game = GameSession(game_id)
+    games[game_id] = game
+    await save_game_state(game_id, game.to_state())
+    asyncio.create_task(game_loop(game_id))
+    return game
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -131,26 +168,29 @@ async def lifespan(app: FastAPI):
         games[game_id] = game
         if game.phase != Phase.FINISHED:
             asyncio.create_task(game_loop(game_id))
+    asyncio.create_task(server_hub.matchmaker_worker(spawn_game))
     yield
 
 app = FastAPI(title="Micro-Diplomacy Server", version="1.0", lifespan=lifespan)
 app.include_router(gauntlet_router)
+app.include_router(server_hub.router)
 
-def authenticate_agent(authorization: Optional[str] = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Bearer token.")
-    faction = authorization.replace("Bearer ", "").strip()
-    if faction not in FACTIONS:
-        raise HTTPException(status_code=403, detail=f"Invalid faction key. Must be one of {FACTIONS}")
-    return faction
+def get_authorized_faction(game_id: str, agent: server_hub.AgentRecord = Depends(server_hub.authenticate_agent)) -> str:
+    """
+    Auth for all per-game agent actions (messages, orders): the Authorization
+    header must be a real agent API key (see server_hub.authenticate_agent),
+    and that agent must have actually been matchmade into *this* game_id -
+    replaces the old scheme where the faction name itself was the credential.
+    """
+    match = server_hub.assigned_matches.get(agent.agent_id)
+    if not match or match["game_id"] != game_id:
+        raise HTTPException(status_code=403, detail="Your agent is not assigned to this game.")
+    return match["faction"]
 
 @app.post("/api/v1/games", status_code=201)
-async def create_game(background_tasks: BackgroundTasks):
+async def create_game():
     game_id = f"game_{len(games) + 1001}"
-    game = GameSession(game_id)
-    games[game_id] = game
-    await save_game_state(game_id, game.to_state())
-    background_tasks.add_task(game_loop, game_id)
+    await spawn_game(game_id)
     return {"game_id": game_id, "status": "CREATED"}
 
 @app.get("/api/v1/games/{game_id}/state", response_model=GameState)
@@ -167,11 +207,11 @@ def get_state(game_id: str):
         scores=game.calculate_scores(),
         winner=game.winner,
         recent_events=game.recent_events,
+        caster_script=game.caster_script,
     )
 
 @app.post("/api/v1/games/{game_id}/messages", status_code=201)
-async def send_message(game_id: str, msg: MessageCreate, faction: str = Header(..., alias="Authorization")):
-    agent_faction = authenticate_agent(faction)
+async def send_message(game_id: str, msg: MessageCreate, agent_faction: str = Depends(get_authorized_faction)):
     game = games.get(game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -191,8 +231,7 @@ async def send_message(game_id: str, msg: MessageCreate, faction: str = Header(.
     return {"message_id": message_obj.id, "status": "DELIVERED"}
 
 @app.get("/api/v1/games/{game_id}/messages")
-def read_messages(game_id: str, since_turn: int = 1, faction: str = Header(..., alias="Authorization")):
-    agent_faction = authenticate_agent(faction)
+def read_messages(game_id: str, since_turn: int = 1, agent_faction: str = Depends(get_authorized_faction)):
     game = games.get(game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -206,8 +245,7 @@ def read_messages(game_id: str, since_turn: int = 1, faction: str = Header(..., 
     return {"messages": visible_messages}
 
 @app.post("/api/v1/games/{game_id}/orders")
-async def submit_orders(game_id: str, payload: Dict[str, List[Order]], faction: str = Header(..., alias="Authorization")):
-    agent_faction = authenticate_agent(faction)
+async def submit_orders(game_id: str, payload: Dict[str, List[Order]], agent_faction: str = Depends(get_authorized_faction)):
     game = games.get(game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")

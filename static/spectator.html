@@ -1,73 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Micro-Diplomacy | Broadcast Desk</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen p-6">
+  <div class="max-w-3xl mx-auto">
 
-<!-- DUAL-CASTER ESPORTS BROADCAST DESK COMPONENT -->
-<div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 mt-6">
-  
-  <!-- Desk Header & Status -->
-  <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-    <div class="flex items-center gap-3">
-      <span class="w-3 h-3 rounded-full bg-rose-500 animate-ping"></span>
-      <div>
-        <h3 class="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-2">
-          Broadcast Desk: <span class="bg-gradient-to-r from-amber-400 via-rose-400 to-indigo-400 bg-clip-text text-transparent">Live Analysis</span>
-        </h3>
-        <span class="text-[10px] text-slate-500 font-mono">Dual-Neural Stream Active</span>
+    <!-- DUAL-CASTER ESPORTS BROADCAST DESK COMPONENT -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 mt-6">
+
+      <!-- Desk Header & Status -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-3">
+          <span class="w-3 h-3 rounded-full bg-rose-500 animate-ping"></span>
+          <div>
+            <h3 class="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-2">
+              Broadcast Desk: <span class="bg-gradient-to-r from-amber-400 via-rose-400 to-indigo-400 bg-clip-text text-transparent">Live Analysis</span>
+            </h3>
+            <span class="text-[10px] text-slate-500 font-mono">Dual-Neural Stream Active</span>
+          </div>
+        </div>
+
+        <!-- Audio Control -->
+        <div class="flex items-center gap-3">
+          <canvas id="dualCasterWaveCanvas" width="100" height="24" class="rounded bg-slate-950 border border-slate-800"></canvas>
+          <button id="btnToggleDualAudio" onclick="toggleDualCasterAudio()" class="px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30">
+            <span id="audioBtnIcon">🔊</span>
+            <span id="audioBtnText">Live Audio On</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Dual-Host Avatars & Live Speaking Indicators -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        <!-- Caster 1: Rex "Viper" Vance -->
+        <div id="cardCasterRex" class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3 transition-all duration-300">
+          <div class="relative">
+            <div id="avatarRexRing" class="w-12 h-12 rounded-full border-2 border-slate-700 bg-amber-950/40 flex items-center justify-center text-xl shadow-inner transition-all duration-300">
+              🎙️
+            </div>
+            <span id="badgeRexLive" class="hidden absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 font-black text-[9px] font-mono uppercase">
+              LIVE
+            </span>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <span class="font-black text-xs text-amber-400 tracking-wide">REX "VIPER" VANCE</span>
+              <span class="text-[9px] font-mono text-slate-500 uppercase">Play-by-Play</span>
+            </div>
+            <div id="subtitlesRex" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300">
+              "Standing by for next adjudication cycle..."
+            </div>
+          </div>
+        </div>
+
+        <!-- Caster 2: Dr. Evelyn Cross -->
+        <div id="cardCasterEvelyn" class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3 transition-all duration-300">
+          <div class="relative">
+            <div id="avatarEvelynRing" class="w-12 h-12 rounded-full border-2 border-slate-700 bg-indigo-950/40 flex items-center justify-center text-xl shadow-inner transition-all duration-300">
+              🧠
+            </div>
+            <span id="badgeEvelynLive" class="hidden absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-indigo-500 text-white font-black text-[9px] font-mono uppercase">
+              LIVE
+            </span>
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <span class="font-black text-xs text-indigo-400 tracking-wide">DR. EVELYN CROSS</span>
+              <span class="text-[9px] font-mono text-slate-500 uppercase">Color Analyst</span>
+            </div>
+            <div id="subtitlesEvelyn" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300">
+              "Monitoring backroom communications and deception scores..."
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
-    <!-- Audio Control -->
-    <div class="flex items-center gap-3">
-      <canvas id="dualCasterWaveCanvas" width="100" height="24" class="rounded bg-slate-950 border border-slate-800"></canvas>
-      <button id="btnToggleDualAudio" onclick="toggleDualCasterAudio()" class="px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30">
-        <span id="audioBtnIcon">🔊</span>
-        <span id="audioBtnText">Live Audio On</span>
-      </button>
-    </div>
+    <p class="text-slate-600 text-xs mt-4">
+      This is a visual preview of the broadcast desk layout — it isn't wired to a live game
+      or to real synthesized audio yet (see <code>app/dual_caster.py</code> in the repo).
+      The audio toggle below only controls this canvas placeholder's animation.
+    </p>
   </div>
 
-  <!-- Dual-Host Avatars & Live Speaking Indicators -->
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    
-    <!-- Caster 1: Rex "Viper" Vance -->
-    <div id="cardCasterRex" class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3 transition-all duration-300">
-      <div class="relative">
-        <div id="avatarRexRing" class="w-12 h-12 rounded-full border-2 border-slate-700 bg-amber-950/40 flex items-center justify-center text-xl shadow-inner transition-all duration-300">
-          🎙️
-        </div>
-        <span id="badgeRexLive" class="hidden absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 font-black text-[9px] font-mono uppercase">
-          LIVE
-        </span>
-      </div>
-      <div class="flex-1">
-        <div class="flex items-center justify-between">
-          <span class="font-black text-xs text-amber-400 tracking-wide">REX "VIPER" VANCE</span>
-          <span class="text-[9px] font-mono text-slate-500 uppercase">Play-by-Play</span>
-        </div>
-        <div id="subtitlesRex" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300">
-          "Standing by for next adjudication cycle..."
-        </div>
-      </div>
-    </div>
+  <script>
+    // No real audio backend is wired up on this page (see the note above) -
+    // this only toggles the placeholder canvas/button state so the button
+    // doesn't call an undefined function.
+    let dualAudioOn = true;
+    const waveCanvas = document.getElementById('dualCasterWaveCanvas');
+    const waveCtx = waveCanvas.getContext('2d');
+    let waveAnimId = null;
 
-    <!-- Caster 2: Dr. Evelyn Cross -->
-    <div id="cardCasterEvelyn" class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3 transition-all duration-300">
-      <div class="relative">
-        <div id="avatarEvelynRing" class="w-12 h-12 rounded-full border-2 border-slate-700 bg-indigo-950/40 flex items-center justify-center text-xl shadow-inner transition-all duration-300">
-          🧠
-        </div>
-        <span id="badgeEvelynLive" class="hidden absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-indigo-500 text-white font-black text-[9px] font-mono uppercase">
-          LIVE
-        </span>
-      </div>
-      <div class="flex-1">
-        <div class="flex items-center justify-between">
-          <span class="font-black text-xs text-indigo-400 tracking-wide">DR. EVELYN CROSS</span>
-          <span class="text-[9px] font-mono text-slate-500 uppercase">Color Analyst</span>
-        </div>
-        <div id="subtitlesEvelyn" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300">
-          "Monitoring backroom communications and deception scores..."
-        </div>
-      </div>
-    </div>
+    function drawIdleWave() {
+      const w = waveCanvas.width, h = waveCanvas.height;
+      waveCtx.clearRect(0, 0, w, h);
+      if (!dualAudioOn) return;
+      waveCtx.strokeStyle = '#818cf8';
+      waveCtx.lineWidth = 1.5;
+      waveCtx.beginPath();
+      const t = Date.now() / 300;
+      for (let x = 0; x < w; x++) {
+        const y = h / 2 + Math.sin(x / 6 + t) * (h / 4) * Math.sin(t / 2);
+        x === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
+      }
+      waveCtx.stroke();
+      waveAnimId = requestAnimationFrame(drawIdleWave);
+    }
 
-  </div>
-</div>
+    function toggleDualCasterAudio() {
+      dualAudioOn = !dualAudioOn;
+      const icon = document.getElementById('audioBtnIcon');
+      const text = document.getElementById('audioBtnText');
+      const btn = document.getElementById('btnToggleDualAudio');
+      if (dualAudioOn) {
+        icon.textContent = '🔊';
+        text.textContent = 'Live Audio On';
+        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30";
+        drawIdleWave();
+      } else {
+        icon.textContent = '🔇';
+        text.textContent = 'Muted';
+        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 transition flex items-center gap-1.5";
+        if (waveAnimId) cancelAnimationFrame(waveAnimId);
+        waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+      }
+    }
+
+    drawIdleWave();
+  </script>
+</body>
+</html>

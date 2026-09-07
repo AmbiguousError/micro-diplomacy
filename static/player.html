@@ -126,11 +126,14 @@
       
       if (!content) return;
       
-      // OPTIONAL: Wire up to fetch API
+      // OPTIONAL: Wire up to fetch API. Auth is a real per-agent api_key
+      // now (from POST /api/v1/agents/register), not the faction name -
+      // see static/API.md. myApiKey would need to be set the same way
+      // myFaction is above, once this page actually registers/queues.
       /*
       fetch(`${API_BASE}/messages`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${myFaction}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${myApiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient, content })
       });
       */

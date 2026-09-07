@@ -27,9 +27,12 @@ class DualCasterBroadcastPacket(BaseModel):
 
 class DualShoutcasterService:
     def __init__(self, openai_client: Optional[AsyncOpenAI] = None):
-        self.llm = openai_client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Falls back to a placeholder key so construction never raises when
+        # OPENAI_API_KEY is unset - credential failures surface at the first
+        # real API call instead (same fix as app/swarm_agent.py's WarRoomSwarm).
+        self.llm = openai_client or AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY") or "not-set")
 
-    async def _generate_llm_script(
+    async def generate_broadcast_script(
         self, turn: int, combat: list, breaches: list, state: dict, match_history_summary: str
     ) -> list:
         """Uses an LLM to generate novel, highly contextual esports banter."""
@@ -48,7 +51,9 @@ class DualShoutcasterService:
         4. Keep it brief. 2 to 4 lines maximum.
         
         OUTPUT FORMAT:
-        Valid JSON array ONLY: [{"speaker": "REX", "text": "..."}, {"speaker": "EVELYN", "text": "..."}]
+        Valid JSON object ONLY, with exactly this shape (a bare array will not
+        parse correctly on our end - it must be wrapped under "dialogue"):
+        {"dialogue": [{"speaker": "REX", "text": "..."}, {"speaker": "EVELYN", "text": "..."}]}
         """
         
         user_prompt = f"""

@@ -21,6 +21,7 @@ class WarRoomSwarm:
         self.model = model
         self.my_faction = None
         self.game_id = None
+        self.api_key = None  # real agent API key from POST /api/v1/agents/register, set externally
         self.arena_url = "http://127.0.0.1:8000"
 
     async def _query_sub_agent(self, role: str, prompt: str, state_context: str) -> str:
@@ -81,5 +82,5 @@ class WarRoomSwarm:
             await self.arena.post(
                 f"{self.arena_url}/api/v1/games/{self.game_id}/orders",
                 json={"orders": decision["orders"]},
-                headers={"Authorization": f"Bearer {self.my_faction}"}
+                headers={"Authorization": f"Bearer {self.api_key}"}
             )

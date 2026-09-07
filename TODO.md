@@ -137,9 +137,16 @@ blocking dependencies where they exist.
       Also added a root `conftest.py` (empty, just anchors pytest's rootdir)
       so plain `pytest tests/` now works without needing `python -m pytest`
       or a `PYTHONPATH` override.
-- [ ] **`git init` the repo.** There's currently no version history, which
-      makes every fix above harder to review/revert incrementally. Do this
-      before starting on the larger items so changes are tracked.
+- [x] **`git init` the repo.** *(Done — `git log --oneline` shows one commit
+      on `main`, `git status` is clean.)*
+      Added `.gitignore` (`venv/`, `__pycache__/`, `.pytest_cache/`, `*.db`,
+      `static/audio/`) before staging anything, then reviewed `git status`
+      after `git add -A` to confirm nothing unwanted (venv, db files, caches)
+      was included and nothing secret-looking was in the diff before
+      committing. Note: no git author identity was configured on this
+      machine — set `user.name`/`user.email` locally (`--local`, this repo
+      only, not `--global`) after checking with the user for what to use,
+      since a global config change wasn't something to make unilaterally.
 
 ## Wiring the disconnected subsystems into `app/main.py`
 
@@ -147,44 +154,212 @@ None of these are `include_router()`'d or otherwise called from
 `app/main.py` today. Each was written/tested standalone, so wiring it in is
 more than adding an import:
 
-- [ ] **`app/gauntlet_router.py` / `app/gauntlet_runner.py`** — blocked on the
-      import-mismatch fix above. Once unblocked, mount the router in
-      `app/main.py` and decide how a real candidate agent (not the router's
-      current `mock_agent_policy` stub) submits its order function for
-      calibration.
-- [ ] **Mount `static/` as `StaticFiles`.** `app/main.py` never serves
-      `static/`, so `spectator.html`, `leaderboard.html`, `player.html`,
-      `playground.html`, and `caster_widget.html` are unreachable through the
-      running server even though `streamer.sh` hard-codes
-      `http://localhost:8000/spectator.html`. Add
-      `app.mount("/", StaticFiles(directory="static", html=True), name="static")`
-      (or under a `/static` prefix — pick one and make sure `streamer.sh`'s
-      URL matches it).
-- [ ] **Rename `static/docs.html)`** (stray trailing `)` in the filename) to
-      `static/docs.html`. No current references were found to the broken
-      name, but re-check once `static/` is actually mounted and linked from
-      other pages.
-- [ ] **`app/server_hub.py` vs. `app/main.py` auth.** `app/main.py`'s
-      `authenticate_agent()` treats the raw `Bearer` token as the faction name
-      (`Red`/`Blue`/`Green`/`Yellow`) with no real secret — anyone who knows
-      the faction name can act as that faction. `server_hub.py` already has a
-      proper per-agent `AgentRecord`/API-key/rate-limiter implementation that
-      isn't used anywhere. Decide whether to migrate `app/main.py` onto
-      `server_hub`'s registration + auth flow (recommended before any public
-      deployment) and, if so, update `agent.py` and `app/swarm_agent.py`'s
-      client-side `Authorization` headers to match.
-- [ ] **`app/dual_caster.py`.** Nothing currently calls
-      `DualShoutcasterService`. Needs: an `OPENAI_API_KEY` env var at
-      runtime, and a call site in `app/main.py`'s `resolve_turn()` (or a
-      background task) that feeds it that turn's combat events / treaty
-      breach events and broadcasts the resulting script to spectators (no
-      delivery mechanism — e.g. WebSocket push to `spectator.html` — exists
-      yet either). Also has the same eager-`AsyncOpenAI()`-construction issue
-      that `app/swarm_agent.py`'s `WarRoomSwarm` had before it was fixed
-      above (`DualShoutcasterService.__init__` raises immediately if
-      `OPENAI_API_KEY` is unset) — apply the same placeholder-key fix when
-      wiring this in, so tests/dev environments without a key don't crash at
-      construction.
+- [x] **`app/gauntlet_router.py` / `app/gauntlet_runner.py`.** *(Done —
+      verified live: wrote a tiny stub "candidate" FastAPI server exposing
+      `POST /policy`, ran it alongside the real referee, hit
+      `POST /api/v1/gauntlet/calibrate/TestBot_v1` with its callback URL,
+      and got back a real 4-match result (`passed: true`, tier `GOLD`) in
+      54ms — confirming matches really do run instantly rather than over
+      real 150s/turn timers. Also verified the failure path: an unreachable
+      `callback_url` correctly returns `422` with a per-turn syntax-error
+      count, and the main server stays healthy afterward rather than
+      crashing. Full test suite still 5/5.)*
+      The design question was how a real candidate agent — whose decision
+      logic runs on the candidate's own machine, per the project's
+      Bring-Your-Own-Compute model — plugs into `GauntletHarness`'s
+      synchronous, in-process `candidate_order_fn(turn, map_units)`
+      simulation loop. Went with an HTTP callback: `POST .../calibrate/{id}`
+      now takes a `callback_url` in its body, and the harness POSTs
+      `{turn, map_units}` to it once per simulated turn, expecting
+      `{"orders": [...]}` back (same order shape as `POST .../orders`).
+      Any callback failure is caught per-turn by `gauntlet_runner.py`'s
+      existing exception handling and counted as a syntax error rather than
+      aborting the match — no changes needed there.
+      `run_calibration_suite()` itself stays fully synchronous (it already
+      was); the router's endpoint wraps it in `asyncio.to_thread(...)` so
+      its blocking HTTP calls to the candidate don't block the event loop.
+      Mounted via `app.include_router(gauntlet_router)` in `app/main.py`.
+      Documented the full callback contract in `static/API.md`, including
+      an honest caveat: there's no separate registration/matchmaking queue
+      live yet (that's `app/server_hub.py`, still unwired — see below), so
+      right now this is a standalone scoring tool, not something the server
+      actually gates entry with.
+- [x] **Mount `static/` as `StaticFiles`.** *(Done — found by the user
+      trying to open the page in a real browser and getting nothing, since
+      `app/main.py` had no route for it at all. Verified via curl: `/`
+      correctly 404s (no `index.html`), `/spectator.html` and `/player.html`
+      both 200, `/api/v1/games` still works unaffected. Not verified in an
+      actual browser — the Claude-in-Chrome extension wasn't connected in
+      this environment, so this needs a human check.)*
+      Added `app.mount("/", StaticFiles(directory="static", html=True), name="static")`
+      at the very end of `app/main.py` (after every `@app.get`/`@app.post`
+      route), so it only catches paths none of the `/api/v1/...` routes
+      matched. Mounted at root, not under `/static`, to match
+      `player.html`'s root-relative `API_BASE = "/api/v1/games/game_1001"`
+      fetches and `streamer.sh`'s hardcoded
+      `http://localhost:8000/spectator.html`.
+- [x] **Rename `static/docs.html)`** (stray trailing `)` in the filename) to
+      `static/docs.html`. *(Done — `git mv`'d to preserve history; confirmed
+      no code referenced the broken filename; test suite still 5/5.)*
+      Found something more important while doing this: unlike
+      `spectator.html`/`caster_widget.html`, `docs.html` **is** a complete,
+      well-formed page (proper `<head>`/Tailwind) — but its content actively
+      contradicts the real live API. It documents `POST
+      /api/v1/agents/register` and `POST /api/v1/queue/join` (the
+      `app/server_hub.py` registration/matchmaking design) and a real
+      per-agent Bearer API key, none of which exist in the running server —
+      the real flow is `POST /api/v1/games` directly with no registration,
+      and `Authorization: Bearer <FactionName>` is the only "credential"
+      (see the auth item above). It's not linked from anywhere right now
+      (including the new `static/index.html` landing page — deliberately,
+      for this reason), but anyone who finds `/docs.html` directly would get
+      actively wrong information that conflicts with `static/RULES.md` and
+      `static/API.md`. Needs a decision once `server_hub.py` is either wired
+      in (in which case update it to match, or point it at the new docs) or
+      confirmed out of scope (in which case delete it or clearly mark it
+      "planned, not yet live") — not fixed here since it's a content/scope
+      decision, not a typo fix.
+- [x] **`static/spectator.html` and `static/caster_widget.html` aren't full
+      HTML documents.** *(Done — the "at minimum" option from this item's
+      original write-up, not the full from-scratch SVG map rebuild; see
+      below for why. Verified live: both return `200` with intact content,
+      full test suite still 5/5, and a tag-balance check found no unclosed
+      elements in either file — real browser confirmation is still
+      outstanding since the Claude-in-Chrome extension isn't connected in
+      this environment.)*
+      On closer inspection while fixing this, the two files aren't actually
+      near-identical duplicates as first thought: `caster_widget.html` is
+      the more complete one — it has a working `<script>` using the
+      browser's native `SpeechSynthesis` API to genuinely speak commentary
+      aloud, a transcript log, and a tension meter. `spectator.html` is a
+      simpler, purely decorative variant with **no `<script>` at all**, so
+      its one interactive element (`onclick="toggleDualCasterAudio()"`) was
+      calling a function that didn't exist anywhere — doubly broken, not
+      just missing its outer `<head>`.
+      Wrapped both in a proper `<!DOCTYPE html>`/`<head>` (Tailwind CDN)
+      without inventing new functionality: gave `spectator.html` a small
+      local stub for the audio toggle (a canvas-only visual, honestly
+      captioned as not wired to real audio) instead of duplicating
+      `caster_widget.html`'s more complete implementation into it; gave
+      `caster_widget.html` the `.chat-scroll` scrollbar CSS its markup
+      already referenced but that only lived in `player.html`'s
+      `<style>` block, so it wasn't actually applying before. Added an
+      honest on-page caption to each noting it's a static preview, not
+      wired to a live game or the server's real Piper TTS pipeline
+      (`app/dual_caster.py`). Did **not** build the "SVG map, waveform
+      visualizer" flagship spectator page `PROJECT_HANDOFF.md` describes —
+      that depends on data that doesn't fully exist yet either (live map
+      polling, real synthesized audio via the still-unwired
+      `app/dual_caster.py`), so building it now would itself be a
+      half-finished feature; a real one is a separate, larger task.
+      Now that both pages are honest and working, linked them from
+      `static/index.html`'s "Try It Yourself" section (as "Broadcast Desk
+      Preview" / "AI Shoutcaster Preview", not implying live functionality)
+      — closing the loop on this item's own note that they were
+      deliberately left unlinked until fixed.
+- [x] **`app/server_hub.py` vs. `app/main.py` auth.** *(Done — full
+      migration, chosen explicitly over the smaller "per-game key only"
+      alternative. Verified live end-to-end, not just unit-tested: a
+      standalone test script registered 4 agents, joined them all to the
+      queue, confirmed the matchmaker actually spun up a real `GameSession`
+      (not just a `game_id` string — see below) and assigned 4 distinct
+      factions, then confirmed: a real `api_key` can send a message; the
+      *old* `Authorization: Bearer <FactionName>` scheme is now rejected
+      (`403`, "Invalid API key."); a valid key used against a
+      *different*/unmatched `game_id` is rejected (`403`, "Your agent is
+      not assigned to this game."); a bogus key is rejected (`403`); a full
+      real turn (waiting out the actual 120s+30s timers) was played and
+      resolved end-to-end using real agent API keys for order submission.
+      Full test suite still 5/5.)*
+      `server_hub.py` had no HTTP routes at all before this — it was pure
+      logic and data structures, never mounted. Also, its
+      `matchmaker_worker()` only ever generated a `game_id` *string* and
+      populated `assigned_matches`; it never actually created a
+      `GameSession`, so even if it had been called, matched agents would
+      have had nothing real to play against.
+      - `app/server_hub.py`: added a real `APIRouter` with
+        `POST /agents/register`, `POST /queue/join`, `GET /queue/status`.
+        `matchmaker_worker()` now takes a `create_game_fn` callback
+        (injected by `app/main.py`) so it can actually spawn a game once 4
+        agents are matched, without a circular import between the two
+        modules. Also swapped its locally-redefined `FACTIONS` constant for
+        importing the one already in `app/mcts.py` (was a duplicate).
+      - `app/main.py`: removed the old faction-name `authenticate_agent()`
+        entirely, replacing it with `get_authorized_faction()` — a
+        dependency that validates a real API key via
+        `server_hub.authenticate_agent` *and* checks the caller's
+        `assigned_matches` entry actually points at the `game_id` in the
+        URL. Factored a `spawn_game()` helper out of the old
+        `create_game()` endpoint body so both it and the matchmaker
+        callback share the same game-creation/persistence/`game_loop`-start
+        logic. `POST /api/v1/games` (direct creation) still exists,
+        deliberately, for admin/testing/spectating — but games created that
+        way now have no agents matched into them, so nothing can actually
+        act in them via messages/orders anymore; only matchmaker-created
+        games can be played.
+      - `agent.py`: rewritten from `--game-id`/`--faction` CLI args (now
+        meaningless — both are assigned by the matchmaker) to
+        `--agent-name`/`--developer-handle`/`--model-identifier`; added
+        `register_and_queue()`, called automatically by `run()`.
+      - `app/swarm_agent.py`: added a `self.api_key` attribute (set
+        externally, same pattern as the existing `self.my_faction`/
+        `self.game_id`); its final orders `POST` now authenticates with it
+        instead of `Bearer {self.my_faction}`.
+      - Updated `static/API.md`, `static/index.html`, and
+        `static/docs.html` to match — all three previously described (or,
+        for `docs.html`, half-implied without actually working) the old
+        flow. `docs.html`'s Python snippet in particular was fixed and then
+        actually executed (4 concurrent copies) against the live server to
+        confirm it now genuinely registers, queues, and gets matched, not
+        just "looks plausible."
+      Explicitly out of scope for this item (noted for later, not done
+      here): `TurnTimeoutManager.resolve_submitted_or_default_orders()` and
+      `AgentRecord.consecutive_timeouts` still aren't wired into
+      `resolve_turn()` — timeout tracking / any future "kick after N
+      misses" policy is a separate, smaller follow-up, not an auth concern.
+- [x] **`app/dual_caster.py`.** *(Done — delivery mechanism chosen
+      explicitly: added to the existing polled `GET .../state` response
+      rather than building new WebSocket push infrastructure (the
+      alternative this item originally suggested). Verified two ways: (1)
+      in-process with a mocked OpenAI client — confirmed the
+      `{"dialogue": [...]}` parsing fix actually works, confirmed it
+      round-trips through `to_state()`/`restore()` and the `GameState`
+      response model, and confirmed a simulated failure is caught without
+      raising; (2) live against the real running server with no
+      `OPENAI_API_KEY` set — played a real turn to resolution and confirmed
+      in the server log that a genuine call was attempted, got a real `401`
+      back from OpenAI, was caught cleanly, and the turn still resolved
+      normally (`caster_script: []`, no crash). Full test suite still 5/5.)*
+      Found a second, independent bug while reading the file closely, before
+      ever calling it: the system prompt told the LLM to output a bare JSON
+      array, but the parsing code did `.get("dialogue", [])` — expecting an
+      *object* with a `"dialogue"` key. Combined with
+      `response_format={"type": "json_object"}` (which forces the OpenAI API
+      to return an object, never a bare array), the model had no way to
+      know it should nest the array under `"dialogue"` — in practice this
+      would have silently produced empty commentary even with a valid API
+      key and a fully working call. Fixed the prompt to specify the exact
+      wrapper shape the code actually parses.
+      Also applied the same eager-`AsyncOpenAI()`-construction fix as
+      `app/swarm_agent.py`'s `WarRoomSwarm`, and renamed the leading-
+      underscore `_generate_llm_script()` to `generate_broadcast_script()`
+      since it's now called from outside the class (`app/main.py`), not
+      just used internally.
+      Wiring: `GameSession` gained a `caster_script` field (persisted,
+      restored, included in `GameState`); `game_loop()` calls
+      `update_caster_script()` right after a turn actually resolves
+      (distinguished from the DIPLOMACY→ORDERS phase-timer tick, which
+      shouldn't trigger commentary generation) — any failure there is
+      caught and clears `caster_script` to `[]` rather than propagating and
+      breaking the game loop. Treaty breach events are passed through as an
+      empty list for now, matching reality (treaties aren't wired into
+      `resolve_turn()` yet — separate TODO item below).
+      Not done, deliberately out of scope per the chosen delivery
+      mechanism: no WebSocket endpoint, and `spectator.html`/
+      `caster_widget.html` still don't actually fetch or display
+      `caster_script` — they remain the static demos described in the item
+      above this one. Wiring the display side is a natural next step but a
+      separate, smaller piece of work.
 - [ ] **`app/map_generator.py`.** `MapGenerator.generate_topology()` produces
       a randomized Delaunay planar graph, but `ADJACENCY`, `SUPPLY_CENTERS`,
       and `STARTING_POSITIONS` in `app/mcts.py` are hardcoded module-level
@@ -198,8 +373,60 @@ more than adding an import:
       a parameter), but no line-of-sight concept exists anywhere in the
       current map/game model — it would need to be defined (e.g. adjacent
       territories to owned units) before this module can be wired in.
+      There's a more upstream blocker too: `app/mcts.py`'s `ActionType`
+      enum only has `HOLD`/`MOVE`/`SUPPORT` — no `SPY`. `SPY` is referenced
+      by `app/treaties_engine.py::resolve_espionage_orders()` (checking
+      `order.get("action") == "SPY"` on plain dicts) and by
+      `app/swarm_agent.py`'s prompt text, but a real order submitted through
+      `POST /api/v1/games/{game_id}/orders` is validated against the strict
+      `Order.action: ActionType` enum — sending `"action": "SPY"` today
+      fails pydantic validation outright (`422`), before espionage logic
+      would ever run. `ActionType` needs a `SPY` member and
+      `Adjudicator.adjudicate()` needs to know to route it to the
+      espionage engine instead of treating it as a combat order, before any
+      of the line-of-sight work above is reachable at all.
 
 ## Gameplay logic gaps
+
+- [x] **Fix a silent unit-erasure bug in `Adjudicator.adjudicate()`.** *(Not on
+      the original list — found by actually playing a simulated game turn by
+      turn (see "how to observe the engine" below) and cross-checking one
+      turn's printed events against the resulting map by hand, then confirmed
+      with a minimal deterministic repro. Fixed and reverified against the
+      same repro plus the full test suite and four other resolution paths
+      (head-to-head swap, 3-way tie, supported dislodge, plain hold) to
+      confirm no regressions.)*
+      `app/mcts.py:146` (now restructured) resolved territories one at a time
+      in `ADJACENCY`'s fixed dict order, writing into one shared
+      `surviving_units` dict for two different things: "who wins this
+      territory as an attack target" and "an attacker bouncing back to its
+      own origin after a failed attack elsewhere." When a unit's home
+      territory was independently captured by a third party's successful,
+      unopposed move the same turn the home unit was away attacking (and
+      failing), the later "bounce back to origin" write silently overwrote
+      the earlier, correct capture — erasing the successful mover from the
+      map entirely with no elimination event logged; the printed event log
+      ("X moved to Y successfully") directly contradicted the resulting
+      state. It was order-dependent on `ADJACENCY`'s declaration order, not
+      random — reproducible every time, not a flake.
+      Fix: split the single `surviving_units` dict into `dest_occupant`
+      (populated once per territory, during that territory's own resolution
+      as an attack/hold target) and `origin_bounce_back` (populated once per
+      failed attacker, keyed by the territory they're returning to), then
+      merge with `dest_occupant` taking priority — matching standard
+      Diplomacy semantics: a failed attacker only returns home if nothing
+      else took that square the same turn. A returning unit that finds its
+      home already taken is now eliminated with an explicit event logged,
+      instead of silently vanishing.
+      **How to observe the engine playing a full game** (useful for spotting
+      this kind of thing again): there's no committed script for this, but
+      `app/mcts.py`'s `SimState`/`Adjudicator`/`FastAdjudicator` and
+      `app/archetypes.py`'s bots (`PacifistTurtle`, `OpportunisticGreedy`,
+      `MachiavellianTraitor`, `StochasticChaos`) can be driven directly in a
+      throwaway script to play out a 10-turn match instantly (no real-time
+      waiting) printing orders/events/scores each turn — much faster than
+      driving the real HTTP API's real-time phase timers, and it's how this
+      bug was actually found rather than just reasoned about.
 
 - [ ] **Make treaty breaches actually affect combat.**
       `TreatyAndEspionageEngine.evaluate_orders_for_breaches()` computes
