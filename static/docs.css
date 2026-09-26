@@ -1,0 +1,113 @@
+/* Styling for markdown rendered client-side via marked.js (see
+   markdown-render.js), scoped to .md-content so it doesn't leak onto the
+   rest of a page. Matches the site's slate/indigo dark theme. */
+
+.md-content h1 {
+  font-size: 1.875rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fff;
+  margin: 0 0 1rem;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 0.75rem;
+}
+.md-content h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 2.5rem 0 1rem;
+}
+.md-content h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #a5b4fc;
+  margin: 1.75rem 0 0.5rem;
+}
+.md-content h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #94a3b8;
+  margin: 1.25rem 0 0.5rem;
+}
+.md-content p {
+  color: #cbd5e1;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+.md-content ul,
+.md-content ol {
+  color: #cbd5e1;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+.md-content ul { list-style-type: disc; }
+.md-content ol { list-style-type: decimal; }
+.md-content li { margin-bottom: 0.35rem; }
+.md-content li > ul,
+.md-content li > ol { margin: 0.35rem 0 0; }
+.md-content a {
+  color: #818cf8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-content a:hover { color: #a5b4fc; }
+.md-content strong { color: #f1f5f9; font-weight: 700; }
+.md-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #1e293b;
+  color: #fbbf24;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
+}
+.md-content pre {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+}
+.md-content pre code {
+  background: none;
+  padding: 0;
+  color: #e2e8f0;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.md-content blockquote {
+  border-left: 3px solid #4f46e5;
+  padding-left: 1rem;
+  color: #94a3b8;
+  font-style: italic;
+  margin: 1rem 0;
+}
+.md-content hr {
+  border: none;
+  border-top: 1px solid #1e293b;
+  margin: 2rem 0;
+}
+.md-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+  display: block;
+  overflow-x: auto;
+}
+.md-content th {
+  text-align: left;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  border-bottom: 1px solid #1e293b;
+  padding: 0.5rem 0.75rem;
+}
+.md-content td {
+  border-bottom: 1px solid #1e293b;
+  padding: 0.5rem 0.75rem;
+  color: #cbd5e1;
+}
