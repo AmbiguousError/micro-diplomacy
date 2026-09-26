@@ -8,10 +8,62 @@
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen">
 <script src="/nav.js"></script>
-  <div class="max-w-3xl mx-auto p-6">
+  <div class="p-6 flex flex-col">
 
-    <!-- DUAL-CASTER ESPORTS BROADCAST DESK COMPONENT -->
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 mt-6">
+    <!-- GAME SELECTOR (HIDDEN WHEN WATCHING) -->
+    <div id="spectatorJoinScreen" class="flex-1 flex items-center justify-center min-h-[70vh]">
+      <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+        <h1 class="text-2xl font-black uppercase tracking-wider text-white mb-1">Spectator Desk</h1>
+        <p class="text-slate-400 text-sm mb-6">Enter a game ID to watch live commentary and gameplay.</p>
+
+        <div id="joinForm">
+          <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Game ID</label>
+          <input type="text" id="gameIdInput" placeholder="e.g. game_1001" maxlength="32"
+                 class="w-full bg-slate-950 border border-slate-700 text-sm rounded-lg px-4 py-2.5 text-white outline-none focus:border-indigo-500 transition mb-3" autocomplete="off">
+          <p id="joinError" class="text-rose-400 text-xs mb-3 hidden"></p>
+          <button id="joinBtn" onclick="watchGame()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20">
+            Watch Game
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME VIEW (HIDDEN UNTIL CONNECTED) -->
+    <div id="spectatorView" class="hidden flex-1 flex flex-col">
+
+      <!-- Header: Game Status -->
+      <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 border-b border-slate-800 pb-4 mb-6">
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">Spectator Desk</h1>
+          <p class="text-slate-400 text-sm mt-1">Watching <span id="watchGameIdLabel" class="font-mono text-slate-500">-</span></p>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner self-stretch sm:self-auto">
+          <div class="flex-1 sm:flex-none text-center px-2 sm:px-4 border-r border-slate-700">
+            <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Turn</span>
+            <span class="text-xl sm:text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
+          </div>
+          <div class="flex-1 sm:flex-none text-center px-2 sm:px-4 border-r border-slate-700">
+            <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Phase</span>
+            <span class="text-base sm:text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
+          </div>
+          <div class="flex-1 sm:flex-none text-center px-2 sm:px-4">
+            <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Time Remaining</span>
+            <span class="text-xl sm:text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:00</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Live Battle Map -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-2">Theater Map</h2>
+        <svg viewBox="0 0 800 500" class="w-full h-64 drop-shadow-lg">
+          <g id="mapEdgesLayer" stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"></g>
+          <g id="mapNodesLayer"></g>
+        </svg>
+      </section>
+
+      <!-- DUAL-CASTER ESPORTS BROADCAST DESK COMPONENT -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
 
       <!-- Desk Header & Status -->
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -53,8 +105,8 @@
               <span class="font-black text-xs text-amber-400 tracking-wide">REX "VIPER" VANCE</span>
               <span class="text-[9px] font-mono text-slate-500 uppercase">Play-by-Play</span>
             </div>
-            <div id="subtitlesRex" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300">
-              "Standing by for next adjudication cycle..."
+            <div id="subtitlesRex" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300 max-h-20 overflow-y-auto">
+              <span class="text-slate-500">Waiting for commentary...</span>
             </div>
           </div>
         </div>
@@ -72,10 +124,10 @@
           <div class="flex-1">
             <div class="flex items-center justify-between">
               <span class="font-black text-xs text-indigo-400 tracking-wide">DR. EVELYN CROSS</span>
-              <span class="text-[9px] font-mono text-slate-500 uppercase">Color Analyst</span>
+              <span class="text-[9px] font-mono text-slate-500 uppercase">Strategy Analysis</span>
             </div>
-            <div id="subtitlesEvelyn" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300">
-              "Monitoring backroom communications and deception scores..."
+            <div id="subtitlesEvelyn" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300 max-h-20 overflow-y-auto">
+              <span class="text-slate-500">Analyzing board state...</span>
             </div>
           </div>
         </div>
@@ -83,58 +135,181 @@
       </div>
     </div>
 
-    <p class="text-slate-600 text-xs mt-4">
-      This is a visual preview of the broadcast desk layout - it isn't wired to a live game
-      or to real synthesized audio yet (see <code>app/dual_caster.py</code> in the repo).
-      The audio toggle below only controls this canvas placeholder's animation.
-    </p>
+      <!-- Exit Button -->
+      <div class="flex gap-3 mt-6">
+        <button onclick="stopWatching()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-4 py-2 rounded-lg transition">
+          Stop Watching
+        </button>
+      </div>
+    </div>
   </div>
 
   <script>
-    // No real audio backend is wired up on this page (see the note above) -
-    // this only toggles the placeholder canvas/button state so the button
-    // doesn't call an undefined function.
-    let dualAudioOn = true;
-    const waveCanvas = document.getElementById('dualCasterWaveCanvas');
-    const waveCtx = waveCanvas.getContext('2d');
-    let waveAnimId = null;
+    let watchingGameId = null;
+    let pollIntervalId = null;
+    let lastSeenCommentaryIndex = -1;
+    const COLORS = {
+      Red: '#ef4444', Blue: '#3b82f6', Green: '#10b981', Yellow: '#f59e0b', Neutral: '#475569'
+    };
+    const TERRITORIES = {
+      Northreach: { x: 220, y: 80, isSC: true },
+      Ironpeaks: { x: 580, y: 80, isSC: true },
+      Westmarch: { x: 130, y: 240, isSC: false },
+      Centerlands: { x: 400, y: 240, isSC: true },
+      Eastgate: { x: 670, y: 240, isSC: false },
+      Sunport: { x: 220, y: 400, isSC: true },
+      Southvale: { x: 400, y: 400, isSC: true },
+      Duneport: { x: 580, y: 400, isSC: true }
+    };
 
-    function drawIdleWave() {
-      const w = waveCanvas.width, h = waveCanvas.height;
-      waveCtx.clearRect(0, 0, w, h);
-      if (!dualAudioOn) return;
-      waveCtx.strokeStyle = '#818cf8';
-      waveCtx.lineWidth = 1.5;
-      waveCtx.beginPath();
-      const t = Date.now() / 300;
-      for (let x = 0; x < w; x++) {
-        const y = h / 2 + Math.sin(x / 6 + t) * (h / 4) * Math.sin(t / 2);
-        x === 0 ? waveCtx.moveTo(x, y) : waveCtx.lineTo(x, y);
+    async function watchGame() {
+      const gameId = document.getElementById('gameIdInput').value.trim();
+      const errorDiv = document.getElementById('joinError');
+      if (!gameId) {
+        errorDiv.textContent = 'Enter a game ID';
+        errorDiv.classList.remove('hidden');
+        return;
       }
-      waveCtx.stroke();
-      waveAnimId = requestAnimationFrame(drawIdleWave);
+
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}`);
+        if (!res.ok) throw new Error('Game not found');
+        watchingGameId = gameId;
+        document.getElementById('spectatorJoinScreen').classList.add('hidden');
+        document.getElementById('spectatorView').classList.remove('hidden');
+        document.getElementById('watchGameIdLabel').textContent = gameId;
+        lastSeenCommentaryIndex = -1;
+        pollGameState();
+        pollIntervalId = setInterval(pollGameState, 1000);
+      } catch (err) {
+        errorDiv.textContent = 'Failed to connect: ' + err.message;
+        errorDiv.classList.remove('hidden');
+      }
+    }
+
+    function stopWatching() {
+      if (pollIntervalId) clearInterval(pollIntervalId);
+      watchingGameId = null;
+      lastSeenCommentaryIndex = -1;
+      document.getElementById('spectatorJoinScreen').classList.remove('hidden');
+      document.getElementById('spectatorView').classList.add('hidden');
+      document.getElementById('gameIdInput').value = '';
+    }
+
+    async function pollGameState() {
+      if (!watchingGameId) return;
+      try {
+        const res = await fetch(`/api/v1/games/${watchingGameId}`);
+        if (!res.ok) return;
+        const state = await res.json();
+
+        document.getElementById('turnDisplay').textContent = state.turn;
+        document.getElementById('phaseDisplay').textContent = state.phase;
+        document.getElementById('timerDisplay').textContent = formatTime(state.time_remaining_seconds);
+
+        renderMap(state);
+        updateCasterCommentary(state.caster_script);
+      } catch (err) {
+        // transient network error - next tick will retry
+      }
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function renderMap(state) {
+      const currentAdjacency = state.adjacency || TERRITORIES;
+      const map = state.map || {};
+
+      const edgesLayer = document.getElementById('mapEdgesLayer');
+      edgesLayer.innerHTML = '';
+
+      const nodePositions = state.coordinates && Object.keys(state.coordinates).length > 0
+        ? state.coordinates
+        : TERRITORIES;
+
+      if (Object.keys(nodePositions).length >= 2) {
+        const terrList = Object.entries(nodePositions);
+        for (let i = 0; i < terrList.length; i++) {
+          const [t1, pos1] = terrList[i];
+          const adj = currentAdjacency[t1] || [];
+          for (const t2 of adj) {
+            if (t1 < t2) {
+              const pos2 = nodePositions[t2];
+              if (pos1 && pos2) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', pos1.x);
+                line.setAttribute('y1', pos1.y);
+                line.setAttribute('x2', pos2.x);
+                line.setAttribute('y2', pos2.y);
+                edgesLayer.appendChild(line);
+              }
+            }
+          }
+        }
+      }
+
+      const nodesLayer = document.getElementById('mapNodesLayer');
+      nodesLayer.innerHTML = Object.entries(nodePositions).map(([name, pos]) => {
+        const tData = map[name] || {};
+        const scColor = tData.owner ? COLORS[tData.owner] : '#1e293b';
+        const unitColor = tData.unit ? COLORS[tData.unit] : 'transparent';
+        const isSC = (state.supply_centers || []).includes(name);
+        const strokeColor = isSC ? '#f8fafc' : '#475569';
+        const strokeW = isSC ? '2.5' : '1.5';
+
+        let html = `<g id="node-${name}">`;
+        html += `<circle cx="${pos.x}" cy="${pos.y}" r="38" fill="${scColor}" fill-opacity="0.25" stroke="${strokeColor}" stroke-width="${strokeW}" />`;
+        if (isSC) html += `<text x="${pos.x}" y="${pos.y - 44}" text-anchor="middle" font-size="14" fill="#fbbf24">★</text>`;
+        if (tData.unit) {
+          html += `<circle cx="${pos.x}" cy="${pos.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
+          html += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${tData.unit[0]}</text>`;
+        }
+        html += `<text x="${pos.x}" y="${pos.y + 32}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+        html += `</g>`;
+        return html;
+      }).join('');
+    }
+
+    function updateCasterCommentary(casterScript) {
+      if (!Array.isArray(casterScript) || casterScript.length <= lastSeenCommentaryIndex + 1) return;
+
+      for (let i = lastSeenCommentaryIndex + 1; i < casterScript.length; i++) {
+        const line = casterScript[i];
+        const isRex = i % 2 === 0;
+        const subtitleDiv = isRex ? document.getElementById('subtitlesRex') : document.getElementById('subtitlesEvelyn');
+
+        if (subtitleDiv) {
+          const p = document.createElement('div');
+          p.className = 'mb-1';
+          p.textContent = line;
+          subtitleDiv.appendChild(p);
+          subtitleDiv.scrollTop = subtitleDiv.scrollHeight;
+        }
+
+        lastSeenCommentaryIndex = i;
+      }
     }
 
     function toggleDualCasterAudio() {
-      dualAudioOn = !dualAudioOn;
       const icon = document.getElementById('audioBtnIcon');
       const text = document.getElementById('audioBtnText');
       const btn = document.getElementById('btnToggleDualAudio');
-      if (dualAudioOn) {
-        icon.textContent = '🔊';
-        text.textContent = 'Live Audio On';
-        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30";
-        drawIdleWave();
-      } else {
+      const isOn = icon.textContent === '🔊';
+
+      if (isOn) {
         icon.textContent = '🔇';
         text.textContent = 'Muted';
         btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 transition flex items-center gap-1.5";
-        if (waveAnimId) cancelAnimationFrame(waveAnimId);
-        waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+      } else {
+        icon.textContent = '🔊';
+        text.textContent = 'Live Audio On';
+        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30";
       }
     }
-
-    drawIdleWave();
   </script>
 </body>
 </html>
