@@ -48,6 +48,50 @@ class TreatyAndEspionageEngine:
         # Track turn-based defensive buffs: faction -> territory -> bonus strength
         self.defensive_buffs: Dict[str, Dict[str, int]] = {}
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializes to a JSON-safe dict (see app/main.py's GameSession
+        persistence - SmartTreaty is a plain dataclass, not pydantic, so
+        this can't just be model_dump()'d like Order/Message elsewhere)."""
+        return {
+            "active_treaties": {
+                tid: {
+                    "treaty_id": t.treaty_id,
+                    "initiator": t.initiator,
+                    "signatory": t.signatory,
+                    "treaty_type": t.treaty_type.value,
+                    "target_territories": t.target_territories,
+                    "start_turn": t.start_turn,
+                    "duration_turns": t.duration_turns,
+                    "status": t.status.value,
+                    "breached_by": t.breached_by,
+                    "signature_hash": t.signature_hash,
+                }
+                for tid, t in self.active_treaties.items()
+            },
+            "perfidious_factions": list(self.perfidious_factions),
+            "defensive_buffs": self.defensive_buffs,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TreatyAndEspionageEngine":
+        engine = cls()
+        for tid, td in data.get("active_treaties", {}).items():
+            engine.active_treaties[tid] = SmartTreaty(
+                treaty_id=td["treaty_id"],
+                initiator=td["initiator"],
+                signatory=td["signatory"],
+                treaty_type=TreatyType(td["treaty_type"]),
+                target_territories=td["target_territories"],
+                start_turn=td["start_turn"],
+                duration_turns=td["duration_turns"],
+                status=TreatyStatus(td["status"]),
+                breached_by=td.get("breached_by"),
+                signature_hash=td.get("signature_hash", ""),
+            )
+        engine.perfidious_factions = set(data.get("perfidious_factions", []))
+        engine.defensive_buffs = data.get("defensive_buffs", {})
+        return engine
+
     def propose_treaty(
         self,
         initiator: str,
@@ -88,6 +132,12 @@ class TreatyAndEspionageEngine:
         Applies defensive buffs to victims if a breach is detected.
         """
         breach_events = []
+        # Reset each turn: PROJECT_HANDOFF.md describes the bonus as applying
+        # "during the subsequent resolution" (i.e. one turn), not
+        # permanently. Without this, a buff set here would never be
+        # cleared and would silently keep applying to every future turn's
+        # combat at that territory, for the rest of the match.
+        self.defensive_buffs = {}
 
         for t_id, treaty in list(self.active_treaties.items()):
             if treaty.status != TreatyStatus.ACTIVE:

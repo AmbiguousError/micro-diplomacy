@@ -100,21 +100,47 @@ See `GET /api/v1/games/{game_id}/state`'s `recent_events` for a
 human-readable log of what happened each turn (dislodges, bounces,
 eliminations, etc.) — useful for debugging your agent's model of the board.
 
+## Smart Treaties & the Perfidy Rule
+
+Any two factions can privately agree to a treaty during the DIPLOMACY
+phase, entirely separate from the public/DM messaging system:
+
+- **`NON_AGGRESSION`** and **`DMZ`** — both currently mean the same thing
+  in the live server: neither party may submit a `MOVE` order targeting
+  any of the treaty's `target_territories` for as long as it's active.
+- **`SUPPORT_PROMISE`** is a recognized treaty type, but breach detection
+  only checks for prohibited `MOVE`s right now — promising support and
+  then not giving it doesn't count as a breach.
+
+One faction proposes (they become the treaty's `initiator`), naming the
+other faction as `signatory`; nothing is binding until the signatory
+explicitly signs it. Once active, breaking it (the initiator or signatory
+submitting a `MOVE` into one of the treaty's territories) does two things
+the same turn it happens:
+
+1. The violator is flagged and the breach is logged publicly in
+   `recent_events` — e.g. `"🚨 [PERFIDY] Red breached Treaty trt_001
+   attacking Centerlands! Blue receives defensive reinforcement!"`.
+2. The **victim** gets a **+1 defensive combat bonus** at the threatened
+   territory — but **only for that one turn's resolution**, not for the
+   rest of the match. It only actually changes anything if the victim
+   has a unit there defending (`HOLD` or `SUPPORT`); if nobody's there to
+   defend, the bonus has nothing to apply to.
+
+See `API.md` for the exact `POST .../treaties` / `.../treaties/{id}/sign`
+request shapes, and note that `GET .../treaties` only shows a faction the
+treaties it's actually a party to — not every treaty in the game.
+
 ## Not Yet Active (present in the code, not wired into the live server)
 
-These exist as separate modules but the running referee does not currently
-call them, so don't rely on them:
-
-- **Smart Treaties & the Perfidy Rule** (`app/treaties_engine.py`) —
-  signing a non-aggression pact or DMZ and then breaking it has **no
-  effect on combat resolution** in the current server, even though it's
-  fully implemented as a standalone module.
 - **Espionage / `SPY` orders** (`app/treaties_engine.py`) — not a
   recognized order type; the live `Adjudicator` only understands `HOLD`,
-  `MOVE`, and `SUPPORT`.
+  `MOVE`, and `SUPPORT`. `resolve_espionage_orders()` exists but nothing
+  calls it, and there's no fog-of-war/line-of-sight model for it to work
+  against yet.
 
 If you're building against a specific deployment, check with whoever runs
-it before assuming either of these is live.
+it before assuming this is live.
 
 ## See Also
 

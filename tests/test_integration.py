@@ -153,57 +153,69 @@ async def test_master_e2e_betrayal_pipeline(mocker):
     treaty_engine.sign_treaty(treaty.treaty_id, "Blue")
     
     # --- C. Swarm Submits Betrayal ---
+    # Red attacks Centerlands *with support* from Ironpeaks (strength 2) -
+    # without the treaty buff this beats Blue's unsupported HOLD (strength
+    # 1) outright, so the test can actually prove the buff changes the
+    # outcome rather than relying on a 1v1 tie that the defender would win
+    # either way (ties always favor the defender in this engine).
     swarm.llm = MagicMock()
     mock_resp = MagicMock()
     mock_resp.choices = [MagicMock()]
     mock_resp.choices[0].message.content = json.dumps({
         "reasoning_consensus": "I am ignoring the treaty.",
-        "orders": [{"unit_territory": "Northreach", "action": "MOVE", "target_destination": "Centerlands"}]
+        "orders": [
+            {"unit_territory": "Northreach", "action": "MOVE", "target_destination": "Centerlands"},
+            {"unit_territory": "Ironpeaks", "action": "SUPPORT", "target_source": "Northreach", "target_destination": "Centerlands"},
+        ]
     })
     swarm.llm.chat.completions.create = AsyncMock(return_value=mock_resp)
-    
+
     # Override arena.post to capture the generated orders
     captured_orders = []
     async def mock_post(url, json, **kwargs):
         captured_orders.extend(json["orders"])
     swarm.arena = MagicMock()
     swarm.arena.post = AsyncMock(side_effect=mock_post)
-    
+
     await swarm.execute_debate_cycle({"turn": 2, "phase": "ORDERS", "map": {}, "scores": {}})
-    
+
     # Formulate joint orders based on the Swarm's output
     joint_orders = {
         "Red": captured_orders,
         "Blue": [{"unit_territory": "Centerlands", "action": "HOLD"}], # Blue trusts the treaty
         "Green": [], "Yellow": []
     }
-    
+
     # --- D. Treaty Audit & Combat Adjudication ---
     breaches = treaty_engine.evaluate_orders_for_breaches(2, joint_orders)
-    
+
     assert len(breaches) == 1
     assert "Red" in treaty_engine.perfidious_factions
     assert treaty_engine.defensive_buffs["Blue"]["Centerlands"] == 1  # Blue gets the defense buff!
-    
-    # Run the Fast Adjudicator
+
     state = SimState(
         turn=2,
-        map_units={"Northreach": "Red", "Centerlands": "Blue"},
-        map_sc={"Northreach": "Red", "Centerlands": "Blue"}
+        map_units={"Northreach": "Red", "Ironpeaks": "Red", "Centerlands": "Blue"},
+        map_sc={"Northreach": "Red", "Ironpeaks": "Red", "Centerlands": "Blue"}
     )
-    
+
     # Convert dicts to Order dataclasses for the adjudicator
     parsed_orders = {
         "Red": tuple(Order(**o) for o in joint_orders["Red"]),
         "Blue": tuple(Order(**o) for o in joint_orders["Blue"])
     }
-    
-    next_state = FastAdjudicator.step(state, parsed_orders)
-    
-    # Because Blue got the Treaty buff, Blue's defense is 2 (1 base + 1 buff). 
-    # Red's attack is 1. Blue survives the backstab!
-    # (Note: Assuming FastAdjudicator is patched to read `defensive_buffs`, or we assert the state conceptually)
-    assert "Blue" in next_state.map_units.values()
+
+    # Without the buff, Red's supported attack (strength 2) should actually
+    # conquer Centerlands - confirms the scenario is a real test of the
+    # buff, not a tie the defender would've won regardless.
+    unbuffed_state = FastAdjudicator.step(state, parsed_orders)
+    assert unbuffed_state.map_units["Centerlands"] == "Red"
+
+    # With the real buff computed by the treaty engine above, Blue's
+    # defense (1 + 1 buff = 2) now matches Red's attack (2) - a tie, which
+    # this engine's rules give to the defender. Blue survives the backstab.
+    next_state = FastAdjudicator.step(state, parsed_orders, defensive_buffs=treaty_engine.defensive_buffs)
+    assert next_state.map_units["Centerlands"] == "Blue"
     
     # --- E. End of Match TrueSkill Update ---
     registry = {"Red": TrueSkillProfile("Red"), "Blue": TrueSkillProfile("Blue")}

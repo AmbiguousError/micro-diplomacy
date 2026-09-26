@@ -428,20 +428,60 @@ more than adding an import:
       driving the real HTTP API's real-time phase timers, and it's how this
       bug was actually found rather than just reasoned about.
 
-- [ ] **Make treaty breaches actually affect combat.**
-      `TreatyAndEspionageEngine.evaluate_orders_for_breaches()` computes
-      `defensive_buffs: Dict[faction, Dict[territory, int]]` on a breach, but
-      `Adjudicator.adjudicate()` in `app/mcts.py` never reads it — a breach
-      currently only sets a flag and produces a log message; the
-      "PERFIDY Rule" (+1 defensive combat bonus) described in
-      `PROJECT_HANDOFF.md` has no actual gameplay effect right now. Thread
-      `defensive_buffs` into `Adjudicator.adjudicate()`'s hold-strength
-      calculation (~`app/mcts.py:141`), and call
-      `TreatyAndEspionageEngine.evaluate_orders_for_breaches()` from
-      `GameSession.resolve_turn()` in `app/main.py` before adjudication runs
-      each turn. `tests/test_integration.py::test_master_e2e_betrayal_pipeline`
-      currently asserts around this gap rather than exercising it — it should
-      start asserting the buff changed the actual combat outcome once fixed.
+- [x] **Make treaty breaches actually affect combat.** *(Done — verified
+      at four independent layers, each catching something the previous
+      one couldn't: (1) direct Python repro of the exact same attack with
+      vs. without the buff — a supported 2-strength attack that conquers
+      Centerlands unbuffed, and is defended successfully once buffed
+      (2v2 tie, defender wins), proving the adjudication math itself is
+      correct; (2) `test_master_e2e_betrayal_pipeline` rewritten per this
+      item's own instruction — it previously asserted around the gap
+      (its own comment said so); now asserts both outcomes explicitly,
+      using a support-based scenario deliberately chosen so the buff
+      changes the result, not a 1v1 tie the defender would've won anyway;
+      (3) a live HTTP test against the real running server covering
+      propose/sign/list and their validation and auth edge cases
+      (self-proposal, bogus treaty type, bogus territory, wrong faction
+      signing, visibility scoped to the two parties only); (4) a live
+      test waiting through the *real* DIPLOMACY/ORDERS timers, confirming
+      the automatic timer-triggered `resolve_turn()` (not a manual Python
+      call) genuinely invokes the treaty engine and logs the breach
+      publicly — plus a separate check that `TreatyAndEspionageEngine`'s
+      new persistence survives a real server restart with the reloaded
+      `TreatyStatus`/`TreatyType` values being genuine Enum instances
+      (`is`, not just `==`), not just coincidentally-equal strings. Full
+      test suite still 5/5.)*
+      Found and fixed a real pre-existing bug while wiring this in, before
+      it ever shipped: `defensive_buffs` was never cleared, so — despite
+      `PROJECT_HANDOFF.md` describing the bonus as applying "during the
+      *subsequent* resolution" (one turn) — it would have silently kept
+      applying to every future turn's combat at that territory for the
+      rest of the match once triggered. Now reset at the top of
+      `evaluate_orders_for_breaches()` each turn.
+      This item's scope turned out bigger than its own description
+      implied: there were **no treaty endpoints at all** yet (`propose_treaty()`/
+      `sign_treaty()` existed only as engine methods nothing ever called) —
+      threading `defensive_buffs` into `Adjudicator.adjudicate()` alone
+      wouldn't have been reachable by anyone. Added
+      `POST .../treaties` (propose), `POST .../treaties/{id}/sign`, and
+      `GET .../treaties` (visible only to the two parties involved) to
+      `app/main.py`, gated to the DIPLOMACY phase like messages.
+      `GameSession` gained a `treaty_engine` (persisted via new
+      `TreatyAndEspionageEngine.to_dict()`/`from_dict()`, since
+      `SmartTreaty` is a plain dataclass, not pydantic, so it couldn't
+      just reuse the `model_dump()` pattern everything else uses).
+      `Adjudicator.adjudicate()` and `FastAdjudicator.step()` both gained
+      an optional `defensive_buffs` parameter, applied only to a
+      defending `HOLD`/`SUPPORT`-hold's strength, never to an attacking
+      `MOVE` — with an explicit `recent_events` line whenever a buff
+      actually gets used, matching every other combat detail already
+      being logged there.
+      Updated `static/RULES.md` (moved treaties out of "Not Yet Active"
+      into their own real section, describing exactly what's implemented
+      including the `SUPPORT_PROMISE`-isn't-breach-checked caveat) and
+      `static/API.md` (all three new endpoints documented, plus why the
+      sign-rejection error message is deliberately non-specific about
+      *why* a sign attempt failed).
 
 ## Frontend wiring
 

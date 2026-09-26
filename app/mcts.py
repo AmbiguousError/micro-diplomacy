@@ -88,8 +88,17 @@ class Adjudicator:
     @staticmethod
     def adjudicate(
         current_map: Dict[str, TerritoryState],
-        submitted_orders: Dict[str, List[Order]]
+        submitted_orders: Dict[str, List[Order]],
+        defensive_buffs: Optional[Dict[str, Dict[str, int]]] = None,
     ) -> Tuple[Dict[str, TerritoryState], List[str]]:
+        """
+        defensive_buffs: faction -> territory -> bonus strength, from
+        app/treaties_engine.py's TreatyAndEspionageEngine (the "Perfidy
+        Rule" +1 defensive bonus after a treaty breach - see
+        PROJECT_HANDOFF.md). Applies only to a defending HOLD/SUPPORT-hold
+        at that territory, never to an attacking MOVE.
+        """
+        defensive_buffs = defensive_buffs or {}
         events: List[str] = []
         new_map: Dict[str, TerritoryState] = {
             t: TerritoryState(sc_owner=state.sc_owner, unit_faction=None)
@@ -142,7 +151,8 @@ class Adjudicator:
                     incoming_attacks[dest].append((terr, faction, 1 + support_bonus))
                 else:
                     events.append(f"Invalid move: {terr} is not adjacent to {dest}. Defaulted to HOLD.")
-                    holds[terr] = (faction, 1)
+                    buff = defensive_buffs.get(faction, {}).get(terr, 0)
+                    holds[terr] = (faction, 1 + buff)
 
             elif order.action in (ActionType.HOLD, ActionType.SUPPORT):
                 support_bonus = sum(
@@ -150,7 +160,10 @@ class Adjudicator:
                     if active_orders[s_terr][1].target_source == terr
                     and active_orders[s_terr][1].target_destination == terr
                 )
-                holds[terr] = (faction, 1 + support_bonus)
+                buff = defensive_buffs.get(faction, {}).get(terr, 0)
+                if buff:
+                    events.append(f"{faction}'s defense at {terr} includes a +{buff} Perfidy bonus from a treaty breach.")
+                holds[terr] = (faction, 1 + support_bonus + buff)
 
         # Two separate maps, merged after the loop below, rather than one
         # shared dict written from both "sides" of a resolution: dest_occupant
@@ -281,7 +294,11 @@ class FastAdjudicator:
     """Thin SimState-shaped wrapper around Adjudicator.adjudicate()."""
 
     @staticmethod
-    def step(state: SimState, joint_orders: Dict[str, Tuple[Order, ...]]) -> SimState:
+    def step(
+        state: SimState,
+        joint_orders: Dict[str, Tuple[Order, ...]],
+        defensive_buffs: Optional[Dict[str, Dict[str, int]]] = None,
+    ) -> SimState:
         current_map: Dict[str, TerritoryState] = {}
         for terr in ADJACENCY:
             unit = state.map_units.get(terr)
@@ -292,7 +309,7 @@ class FastAdjudicator:
             )
 
         submitted_orders = {faction: list(orders) for faction, orders in joint_orders.items()}
-        new_map, _events = Adjudicator.adjudicate(current_map, submitted_orders)
+        new_map, _events = Adjudicator.adjudicate(current_map, submitted_orders, defensive_buffs=defensive_buffs)
 
         new_map_units = {terr: ts.unit_faction for terr, ts in new_map.items() if ts.unit_faction}
         new_map_sc = {terr: (ts.sc_owner or "Neutral") for terr, ts in new_map.items() if terr in SUPPLY_CENTERS}

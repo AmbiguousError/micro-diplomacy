@@ -14,6 +14,7 @@ from .db import init_db, load_all_game_states, save_game_state
 from .dual_caster import DualShoutcasterService
 from .gauntlet_router import router as gauntlet_router
 from .mcts import Adjudicator, FACTIONS, Order, Phase, STARTING_POSITIONS, SUPPLY_CENTERS, TerritoryState, GameState, ADJACENCY, SimState
+from .treaties_engine import TreatyAndEspionageEngine, TreatyType
 
 ARCHETYPE_CLASSES = {
     "PacifistTurtle": PacifistTurtle,
@@ -38,6 +39,12 @@ class Message(BaseModel):
     content: str
     timestamp: str
 
+class TreatyProposal(BaseModel):
+    signatory: str
+    treaty_type: str  # "NON_AGGRESSION" | "DMZ" | "SUPPORT_PROMISE"
+    target_territories: List[str]
+    duration_turns: int = 5
+
 class GameSession:
     def __init__(self, game_id: str):
         self.game_id = game_id
@@ -53,6 +60,7 @@ class GameSession:
         # faction -> archetype class name, for factions controlled by a
         # built-in bot instead of a real registered agent.
         self.bot_factions: Dict[str, str] = {}
+        self.treaty_engine = TreatyAndEspionageEngine()
 
         self.map: Dict[str, TerritoryState] = {
             t: TerritoryState(sc_owner=None, unit_faction=None) for t in ADJACENCY
@@ -107,9 +115,14 @@ class GameSession:
             self.resolve_turn()
 
     def resolve_turn(self):
-        new_map, events = Adjudicator.adjudicate(self.map, self.orders)
+        orders_as_dicts = {f: [o.model_dump() for o in orders] for f, orders in self.orders.items()}
+        breach_events = self.treaty_engine.evaluate_orders_for_breaches(self.turn, orders_as_dicts)
+
+        new_map, events = Adjudicator.adjudicate(
+            self.map, self.orders, defensive_buffs=self.treaty_engine.defensive_buffs
+        )
         self.map = new_map
-        self.recent_events = events
+        self.recent_events = [b["message"] for b in breach_events] + events
         self.orders = {f: [] for f in FACTIONS}
 
         scores = self.calculate_scores()
@@ -143,6 +156,7 @@ class GameSession:
             "recent_events": self.recent_events,
             "bot_factions": self.bot_factions,
             "caster_script": self.caster_script,
+            "treaty_engine": self.treaty_engine.to_dict(),
             "map": {terr: ts.model_dump() for terr, ts in self.map.items()},
         }
 
@@ -155,6 +169,7 @@ class GameSession:
         self.messages = [Message(**m) for m in state.get("messages", [])]
         self.orders = {f: [Order(**o) for o in orders] for f, orders in state.get("orders", {}).items()}
         self.bot_factions = state.get("bot_factions", {})
+        self.treaty_engine = TreatyAndEspionageEngine.from_dict(state.get("treaty_engine", {}))
         self.caster_script = state.get("caster_script", [])
         self.recent_events = state.get("recent_events", [])
         self.map = {terr: TerritoryState(**ts) for terr, ts in state.get("map", {}).items()}
@@ -364,6 +379,76 @@ async def submit_orders(game_id: str, payload: Dict[str, List[Order]], agent_fac
     game.orders[agent_faction] = orders
     await save_game_state(game_id, game.to_state())
     return {"status": "ACCEPTED", "turn": game.turn, "order_count": len(orders)}
+
+def _treaty_to_dict(t) -> Dict[str, Any]:
+    return {
+        "treaty_id": t.treaty_id,
+        "initiator": t.initiator,
+        "signatory": t.signatory,
+        "treaty_type": t.treaty_type.value,
+        "target_territories": t.target_territories,
+        "start_turn": t.start_turn,
+        "duration_turns": t.duration_turns,
+        "status": t.status.value,
+        "breached_by": t.breached_by,
+    }
+
+@app.post("/api/v1/games/{game_id}/treaties", status_code=201)
+async def propose_treaty(game_id: str, proposal: TreatyProposal, agent_faction: str = Depends(get_authorized_faction)):
+    game = games.get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game.phase != Phase.DIPLOMACY:
+        raise HTTPException(status_code=400, detail="Treaties can only be proposed during DIPLOMACY phase")
+    if proposal.signatory not in FACTIONS:
+        raise HTTPException(status_code=422, detail=f"signatory must be one of {FACTIONS}")
+    if proposal.signatory == agent_faction:
+        raise HTTPException(status_code=422, detail="Cannot propose a treaty with yourself")
+    try:
+        treaty_type = TreatyType(proposal.treaty_type)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"treaty_type must be one of {[t.value for t in TreatyType]}")
+    invalid_terrs = [t for t in proposal.target_territories if t not in ADJACENCY]
+    if invalid_terrs:
+        raise HTTPException(status_code=422, detail=f"Unknown territories: {invalid_terrs}")
+    if proposal.duration_turns < 1:
+        raise HTTPException(status_code=422, detail="duration_turns must be at least 1")
+
+    treaty = game.treaty_engine.propose_treaty(
+        initiator=agent_faction,
+        signatory=proposal.signatory,
+        treaty_type=treaty_type,
+        territories=proposal.target_territories,
+        current_turn=game.turn,
+        duration=proposal.duration_turns,
+    )
+    await save_game_state(game_id, game.to_state())
+    return _treaty_to_dict(treaty)
+
+@app.post("/api/v1/games/{game_id}/treaties/{treaty_id}/sign")
+async def sign_treaty(game_id: str, treaty_id: str, agent_faction: str = Depends(get_authorized_faction)):
+    game = games.get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    if game.phase != Phase.DIPLOMACY:
+        raise HTTPException(status_code=400, detail="Treaties can only be signed during DIPLOMACY phase")
+    signed = game.treaty_engine.sign_treaty(treaty_id, agent_faction)
+    if not signed:
+        raise HTTPException(status_code=400, detail="Treaty not found, already signed, or you are not its signatory")
+    await save_game_state(game_id, game.to_state())
+    return _treaty_to_dict(game.treaty_engine.active_treaties[treaty_id])
+
+@app.get("/api/v1/games/{game_id}/treaties")
+def list_treaties(game_id: str, agent_faction: str = Depends(get_authorized_faction)):
+    game = games.get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    visible = [
+        _treaty_to_dict(t)
+        for t in game.treaty_engine.active_treaties.values()
+        if agent_faction in (t.initiator, t.signatory)
+    ]
+    return {"treaties": visible}
 
 # Mounted last so it only catches paths none of the /api/v1/... routes above
 # matched - e.g. GET /spectator.html or / (index.html). Root-mounted (not

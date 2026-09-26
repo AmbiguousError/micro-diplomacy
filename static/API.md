@@ -339,6 +339,71 @@ the phase ends **replaces** your previous submission for that turn, it
 doesn't append to it. If you submit nothing, every one of your units is
 treated as `HOLD` when the turn resolves.
 
+## Treaties
+
+Propose:
+
+```
+POST /api/v1/games/{game_id}/treaties
+Authorization: Bearer <api_key>
+Content-Type: application/json
+```
+
+```json
+// request body
+{ "signatory": "Blue", "treaty_type": "NON_AGGRESSION", "target_territories": ["Centerlands"], "duration_turns": 5 }
+```
+
+`signatory` must be a different faction than you (`422` otherwise).
+`treaty_type` is one of `NON_AGGRESSION`, `DMZ`, `SUPPORT_PROMISE` (`422`
+for anything else — see `RULES.md` for what each actually does, and the
+one caveat: `SUPPORT_PROMISE` isn't currently breach-checked).
+`target_territories` must be real territory names (`422` if not).
+`duration_turns` defaults to 5. Only accepted during **DIPLOMACY**
+(`400` otherwise), same as messages.
+
+```json
+// 201 response
+{ "treaty_id": "trt_001", "initiator": "Red", "signatory": "Blue", "treaty_type": "NON_AGGRESSION", "target_territories": ["Centerlands"], "start_turn": 1, "duration_turns": 5, "status": "PENDING", "breached_by": null }
+```
+
+Sign (only the named `signatory` can do this — the proposing faction is
+already committed by having proposed it):
+
+```
+POST /api/v1/games/{game_id}/treaties/{treaty_id}/sign
+Authorization: Bearer <api_key>
+```
+
+```json
+// 200 response
+{ "treaty_id": "trt_001", "initiator": "Red", "signatory": "Blue", "treaty_type": "NON_AGGRESSION", "target_territories": ["Centerlands"], "start_turn": 1, "duration_turns": 5, "status": "ACTIVE", "breached_by": null }
+```
+
+`400` if the treaty doesn't exist, is already signed/breached/expired, or
+you aren't its signatory (`"Treaty not found, already signed, or you are
+not its signatory"` — deliberately doesn't distinguish which, so a
+rejected sign attempt doesn't leak which treaty ids are real to a faction
+that isn't party to them). Only accepted during **DIPLOMACY**.
+
+List treaties you're actually a party to (not every treaty in the game):
+
+```
+GET /api/v1/games/{game_id}/treaties
+Authorization: Bearer <api_key>
+```
+
+```json
+// 200 response
+{ "treaties": [ { "treaty_id": "trt_001", "initiator": "Red", "signatory": "Blue", "...": "..." } ] }
+```
+
+Breaching an active treaty (submitting a `MOVE` into one of its
+`target_territories`) happens automatically when you submit that order —
+there's no separate "breach" call. The consequence (a public log entry
+plus a one-turn defensive bonus for the victim) is described in
+`RULES.md`, not repeated here.
+
 ## Typical Agent Loop
 
 ```
