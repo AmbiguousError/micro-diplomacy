@@ -443,6 +443,64 @@ more than adding an import:
       currently asserts around this gap rather than exercising it — it should
       start asserting the buff changed the actual combat outcome once fixed.
 
+## Frontend wiring
+
+- [x] **Wire up `static/player.html` for real.** *(Done — it was previously
+      a pure UI mockup: `sendMessage()`'s `fetch()` call was commented out
+      and `submitOrders()` had a bare `// Logic ... goes here` comment, so
+      clicking "Play" never actually created or joined a game. Verified
+      with a genuinely rigorous method given no real browser was available
+      in this environment (Claude-in-Chrome wasn't connected): installed
+      jsdom and executed this exact file's actual `<script>` inside a real
+      DOM against the live local server — not a mock, not just reading the
+      code. Pre-queued 3 synthetic bot agents, then drove the page's own
+      `handleJoinClick()`/`sendMessage()`/`submitOrders()` functions and
+      waited through the *real* 120s DIPLOMACY + 30s ORDERS timers.
+      Confirmed: real registration and matchmaking (assigned a real
+      faction and `game_id`); state polling renders turn/phase/timer/owned
+      units correctly; a chat message round-tripped through a real
+      `POST .../messages` and was picked back up by polling with correct
+      de-duplication; the ORDERS-phase form rendered the right owned
+      unit, and its `MOVE` destination dropdown exactly matched the
+      server's real adjacency data; order submission succeeded and the
+      turn genuinely advanced (1 → 2) after the real timer elapsed. Also
+      separately unit-tested the `SUPPORT` order UI in isolation (source
+      dropdown listing all occupied territories, destination dropdown
+      correctly updating to `[source, ...its adjacency]` when the
+      supported unit changes) since the live run's single-unit bot never
+      exercised that path. Full backend test suite still 5/5 throughout
+      (unaffected).)*
+      Added a join screen (display name → register → queue → poll until
+      matched) persisted via `localStorage` so a page refresh resumes an
+      in-progress match instead of losing it; a finished-game banner with
+      a "Register New Agent" reset. Two honest gaps this surfaced, not
+      fixed here:
+      - **There's no way to leave the queue.** `app/server_hub.py`'s
+        `matchmaking_queue` only ever pops agents once 4 accumulate — there
+        is no "leave queue" endpoint, so a solo human who registers and
+        joins genuinely queues forever until 3 more agents (human or bot)
+        join too. The UI is honest about this ("waiting for 3 more
+        players") but can't offer a cancel button because the server has
+        nothing to cancel into.
+      - Confirmed **`static/leaderboard.html` is 100% fake** — `mockData`
+        is a hardcoded array, there is no `GET /api/v1/leaderboard`
+        endpoint, and `AgentRecord.elo_rating` (`app/server_hub.py`) is
+        never updated by anything after a match. Building a real one needs
+        `app/main.py`'s `resolve_turn()`/game-finish path to actually call
+        `app/trueskill_engine.py` or `app/elo_calibrator.py` (see the
+        canonical-rating-system item below) and persist the result
+        somewhere queryable — a meaningfully larger task than this item,
+        not attempted here.
+- [x] **Add `GET /api/v1/games`.** *(Done, small addition alongside the
+      above — there was previously no way to see what games exist at all
+      without direct DB access; you had to already know a `game_id`.)*
+      Returns `{"games": [{game_id, turn, phase, scores, winner}, ...]}`
+      for every game currently held in memory. Public, no auth, same
+      philosophy as `GET .../state`. Surfaced visibly via a new "Live
+      Games" section on `static/index.html` (auto-refreshes every 5s) —
+      verified it correctly reflected the real game created during the
+      jsdom test above.
+
 ## Consolidation (multiple implementations of the same thing)
 
 - [ ] **Decide the canonical game-rules implementation and archive/delete the
@@ -455,6 +513,16 @@ more than adding an import:
       canonical copy. Either delete/archive `engine.py`, or clearly mark it as
       an experimental alternate implementation so future rule changes don't
       silently only land in one of the three.
+      **Now a fourth copy**: `static/player.html`'s real order-submission UI
+      (wired up to actually register/queue/play, see below) needs
+      `ADJACENCY` client-side to validate `MOVE`/`SUPPORT` destination
+      dropdowns, and duplicates it inline rather than fetching it from the
+      server — flagged in a comment in that file pointing back here. If the
+      map topology ever changes (e.g. `app/map_generator.py` gets wired in),
+      this is one more place that will silently drift out of sync unless a
+      real "get the current map's topology" endpoint gets built and all four
+      copies (`app/mcts.py`, `engine.py`, `agent.py`, `static/player.html`)
+      are pointed at it instead.
 - [ ] **Decide the canonical rating system.** `app/trueskill_engine.py` (used
       by `app/gauntlet_runner.py`) and `app/elo_calibrator.py` (standalone,
       only exercised by its own `if __name__ == "__main__"` demo) are two

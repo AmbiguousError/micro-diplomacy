@@ -193,6 +193,24 @@ async def create_game():
     await spawn_game(game_id)
     return {"game_id": game_id, "status": "CREATED"}
 
+@app.get("/api/v1/games")
+def list_games():
+    """Lightweight summary of every game currently held in memory, public
+    like GET .../state (no auth) - lets a spectator see what's running
+    without needing to already know a game_id."""
+    return {
+        "games": [
+            {
+                "game_id": g.game_id,
+                "turn": g.turn,
+                "phase": g.phase,
+                "scores": g.calculate_scores(),
+                "winner": g.winner,
+            }
+            for g in games.values()
+        ]
+    }
+
 @app.get("/api/v1/games/{game_id}/state", response_model=GameState)
 def get_state(game_id: str):
     game = games.get(game_id)

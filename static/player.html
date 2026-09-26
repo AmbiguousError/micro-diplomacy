@@ -16,106 +16,493 @@
 <script src="/nav.js"></script>
   <div class="p-6 flex flex-col">
 
-  <!-- Header: Game Status & Phase -->
-  <header class="flex justify-between items-end border-b border-slate-800 pb-4 mb-6">
-    <div>
-      <h1 class="text-3xl font-black uppercase tracking-wider text-white">Command Deck</h1>
-      <p class="text-slate-400 text-sm mt-1">Human-in-the-Loop Tactical Interface</p>
+  <!-- JOIN / MATCHMAKING SCREEN -->
+  <div id="joinScreen" class="flex-1 flex items-center justify-center min-h-[70vh]">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+      <h1 class="text-2xl font-black uppercase tracking-wider text-white mb-1">Command Deck</h1>
+      <p class="text-slate-400 text-sm mb-6">Register and join the matchmaking queue to be assigned a faction.</p>
+
+      <div id="joinForm">
+        <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Display Name</label>
+        <input type="text" id="displayNameInput" placeholder="e.g. Napoleon_42" maxlength="32"
+               class="w-full bg-slate-950 border border-slate-700 text-sm rounded-lg px-4 py-2.5 text-white outline-none focus:border-indigo-500 transition mb-2" autocomplete="off">
+        <p id="joinError" class="text-rose-400 text-xs mb-3 hidden"></p>
+        <button id="joinBtn" onclick="handleJoinClick()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20">
+          Find Match
+        </button>
+      </div>
+
+      <div id="waitingPanel" class="hidden text-center">
+        <div class="animate-pulse text-indigo-400 font-mono text-sm mb-2" id="waitingStatusText">Queued...</div>
+        <p class="text-slate-500 text-xs">A match starts as soon as 4 agents (human or bot) are in the queue. This page keeps polling automatically.</p>
+      </div>
     </div>
-    <div class="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner">
-      <div class="text-center px-4 border-r border-slate-700">
-        <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Turn</span>
-        <span class="text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
+  </div>
+
+  <!-- GAME VIEW (hidden until matched) -->
+  <div id="gameView" class="hidden flex-1 flex-col">
+
+    <!-- Finished banner -->
+    <div id="finishedBanner" class="hidden bg-indigo-950 border border-indigo-800 rounded-2xl p-4 mb-6 flex items-center justify-between">
+      <div>
+        <p class="text-[10px] uppercase tracking-widest text-indigo-400 font-bold">Game Over</p>
+        <p class="text-lg font-black text-white" id="finishedText">Winner: -</p>
       </div>
-      <div class="text-center px-4 border-r border-slate-700">
-        <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Phase</span>
-        <span class="text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
-      </div>
-      <div class="text-center px-4">
-        <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Time Remaining</span>
-        <span class="text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:45</span>
-      </div>
+      <button onclick="resetAgent()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-4 py-2 rounded-lg transition">Register New Agent</button>
     </div>
-  </header>
 
-  <main class="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1">
-    
-    <!-- LEFT COLUMN: DIPLOMACY & COMMUNICTIONS -->
-    <section class="flex flex-col gap-4 h-[70vh]">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
-        
-        <!-- Chat Header -->
-        <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Encrypted Comms Link</h2>
-          <span class="flex items-center gap-2 text-xs font-mono text-emerald-400">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live
-          </span>
+    <!-- Header: Game Status & Phase -->
+    <header class="flex justify-between items-end border-b border-slate-800 pb-4 mb-6">
+      <div>
+        <h1 class="text-3xl font-black uppercase tracking-wider text-white">Command Deck</h1>
+        <p class="text-slate-400 text-sm mt-1">Playing as <span id="myFactionLabel" class="font-bold">-</span> in <span id="gameIdLabel" class="font-mono text-slate-500">-</span></p>
+      </div>
+      <div class="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner">
+        <div class="text-center px-4 border-r border-slate-700">
+          <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Turn</span>
+          <span class="text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
         </div>
-
-        <!-- Chat History -->
-        <div class="flex-1 p-4 overflow-y-auto chat-scroll space-y-4" id="chatHistory">
-          <div class="text-xs text-slate-500 italic text-center">-- Secure Channel Established --</div>
-          <!-- Messages will be injected here -->
+        <div class="text-center px-4 border-r border-slate-700">
+          <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Phase</span>
+          <span class="text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
         </div>
-
-        <!-- Message Input -->
-        <div class="p-4 bg-slate-950 border-t border-slate-800 flex gap-3">
-          <select id="recipientSelect" class="bg-slate-900 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 outline-none focus:border-indigo-500 transition">
-            <option value="PUBLIC">PUBLIC</option>
-            <option value="Red" class="text-red-400 font-bold">Red Faction</option>
-            <option value="Blue" class="text-blue-400 font-bold">Blue Faction</option>
-            <option value="Green" class="text-green-400 font-bold">Green Faction</option>
-            <option value="Yellow" class="text-yellow-400 font-bold">Yellow Faction</option>
-          </select>
-          <input type="text" id="messageInput" placeholder="Draft diplomatic proposal or bluff..." class="flex-1 bg-slate-900 border border-slate-700 text-sm rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 transition" autocomplete="off">
-          <button onclick="sendMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded-lg text-sm transition shadow-lg shadow-indigo-600/20">Send</button>
+        <div class="text-center px-4">
+          <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Time Remaining</span>
+          <span class="text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:00</span>
         </div>
       </div>
-    </section>
+    </header>
 
-    <!-- RIGHT COLUMN: TACTICAL ORDERS -->
-    <section class="flex flex-col gap-4 h-[70vh]">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
-        
-        <!-- Orders Header -->
-        <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Unit Command Terminal</h2>
-          <span class="text-xs font-mono text-slate-500" id="ownedUnitsCount">0 Units Active</span>
+    <main class="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1">
+
+      <!-- LEFT COLUMN: DIPLOMACY & COMMUNICTIONS -->
+      <section class="flex flex-col gap-4 h-[70vh]">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+
+          <!-- Chat Header -->
+          <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Encrypted Comms Link</h2>
+            <span class="flex items-center gap-2 text-xs font-mono text-emerald-400">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live
+            </span>
+          </div>
+
+          <!-- Chat History -->
+          <div class="flex-1 p-4 overflow-y-auto chat-scroll space-y-4" id="chatHistory">
+            <div class="text-xs text-slate-500 italic text-center">-- Secure Channel Established --</div>
+          </div>
+
+          <!-- Message Input -->
+          <div class="p-4 bg-slate-950 border-t border-slate-800 flex gap-3">
+            <select id="recipientSelect" class="bg-slate-900 border border-slate-700 text-sm rounded-lg px-3 py-2 text-slate-300 outline-none focus:border-indigo-500 transition">
+              <option value="PUBLIC">PUBLIC</option>
+              <option value="Red" class="text-red-400 font-bold">Red Faction</option>
+              <option value="Blue" class="text-blue-400 font-bold">Blue Faction</option>
+              <option value="Green" class="text-green-400 font-bold">Green Faction</option>
+              <option value="Yellow" class="text-yellow-400 font-bold">Yellow Faction</option>
+            </select>
+            <input type="text" id="messageInput" placeholder="Draft diplomatic proposal or bluff..." class="flex-1 bg-slate-900 border border-slate-700 text-sm rounded-lg px-4 py-2 text-white outline-none focus:border-indigo-500 transition" autocomplete="off">
+            <button id="sendMessageBtn" onclick="sendMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2 rounded-lg text-sm transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed">Send</button>
+          </div>
         </div>
+      </section>
 
-        <!-- Orders Form -->
-        <div class="flex-1 p-4 overflow-y-auto space-y-4" id="ordersContainer">
-          <div class="text-xs text-slate-500 italic text-center mt-10">Awaiting Orders Phase...</div>
-          <!-- Order blocks injected here based on controlled territories -->
+      <!-- RIGHT COLUMN: TACTICAL ORDERS -->
+      <section class="flex flex-col gap-4 h-[70vh]">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
+
+          <!-- Orders Header -->
+          <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Unit Command Terminal</h2>
+            <span class="text-xs font-mono text-slate-500" id="ownedUnitsCount">0 Units Active</span>
+          </div>
+
+          <!-- Orders Form -->
+          <div class="flex-1 p-4 overflow-y-auto space-y-3" id="ordersContainer">
+            <div class="text-xs text-slate-500 italic text-center mt-10">Waiting for match state...</div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="p-4 bg-slate-950 border-t border-slate-800">
+            <button id="submitOrdersBtn" onclick="submitOrders()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest py-4 rounded-xl text-sm transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
+              Lock In Orders
+            </button>
+          </div>
         </div>
+      </section>
 
-        <!-- Submit Button -->
-        <div class="p-4 bg-slate-950 border-t border-slate-800">
-          <button id="submitOrdersBtn" onclick="submitOrders()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest py-4 rounded-xl text-sm transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
-            Lock In Orders
-          </button>
-        </div>
-      </div>
-    </section>
-
-  </main>
+    </main>
+  </div>
 
   </div>
 
   <script>
-    // Placeholder Client Logic (To be hooked up to your FastAPI REST/WS endpoints)
-    let myFaction = "Red"; // Assigned upon joining
-    const API_BASE = "/api/v1/games/game_1001"; 
+    /*
+     * Real client logic for the Human Command Deck. Registers via
+     * POST /api/v1/agents/register, joins matchmaking, polls until matched,
+     * then polls game state/messages and submits real messages/orders -
+     * see static/API.md for the exact request/response shapes this
+     * mirrors.
+     *
+     * ADJACENCY/SUPPLY_CENTERS below are a duplicate of app/mcts.py's
+     * canonical copy (needed here to validate MOVE/SUPPORT destinations
+     * client-side) - if the map topology ever changes, this needs
+     * updating too. This is the same kind of map-data duplication
+     * TODO.md already tracks for engine.py/agent.py; worth consolidating
+     * behind a single endpoint later rather than adding a fourth copy.
+     */
+    const ADJACENCY = {
+      Northreach: ["Ironpeaks", "Westmarch", "Centerlands"],
+      Ironpeaks: ["Northreach", "Centerlands", "Eastgate"],
+      Westmarch: ["Northreach", "Centerlands", "Sunport", "Southvale"],
+      Centerlands: ["Northreach", "Ironpeaks", "Westmarch", "Eastgate", "Southvale"],
+      Eastgate: ["Ironpeaks", "Centerlands", "Southvale", "Duneport"],
+      Sunport: ["Westmarch", "Southvale"],
+      Southvale: ["Westmarch", "Centerlands", "Eastgate", "Sunport", "Duneport"],
+      Duneport: ["Eastgate", "Southvale"],
+    };
+
+    const STATE_POLL_MS = 2000;
+    const QUEUE_POLL_MS = 2000;
+
+    let apiKey = localStorage.getItem("mdApiKey");
+    let agentId = localStorage.getItem("mdAgentId");
+    let gameId = null;
+    let myFaction = null;
+    let seenMessageIds = new Set();
+    let lastOrdersFormTurn = null;
+    let queuePollHandle = null;
+    let statePollHandle = null;
+
+    function showJoinForm(errorText) {
+      document.getElementById("joinScreen").classList.remove("hidden");
+      document.getElementById("gameView").classList.add("hidden");
+      document.getElementById("joinForm").classList.remove("hidden");
+      document.getElementById("waitingPanel").classList.add("hidden");
+      const err = document.getElementById("joinError");
+      if (errorText) {
+        err.textContent = errorText;
+        err.classList.remove("hidden");
+      } else {
+        err.classList.add("hidden");
+      }
+    }
+
+    function showWaitingPanel(text) {
+      document.getElementById("joinForm").classList.add("hidden");
+      document.getElementById("waitingPanel").classList.remove("hidden");
+      document.getElementById("waitingStatusText").textContent = text;
+    }
+
+    function showGameView() {
+      document.getElementById("joinScreen").classList.add("hidden");
+      const gv = document.getElementById("gameView");
+      gv.classList.remove("hidden");
+      gv.classList.add("flex");
+      document.getElementById("myFactionLabel").textContent = myFaction;
+      document.getElementById("gameIdLabel").textContent = gameId;
+    }
+
+    function resetAgent() {
+      localStorage.removeItem("mdApiKey");
+      localStorage.removeItem("mdAgentId");
+      window.location.reload();
+    }
+
+    async function handleJoinClick() {
+      const nameInput = document.getElementById("displayNameInput");
+      const name = nameInput.value.trim();
+      if (name.length < 3) {
+        showJoinForm("Display name must be at least 3 characters.");
+        return;
+      }
+      document.getElementById("joinBtn").disabled = true;
+      try {
+        const res = await fetch("/api/v1/agents/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agent_name: name, developer_handle: "web-player" }),
+        });
+        if (!res.ok) throw new Error(`Registration failed (${res.status})`);
+        const record = await res.json();
+        apiKey = record.api_key;
+        agentId = record.agent_id;
+        localStorage.setItem("mdApiKey", apiKey);
+        localStorage.setItem("mdAgentId", agentId);
+        await joinQueueAndPoll();
+      } catch (err) {
+        document.getElementById("joinBtn").disabled = false;
+        showJoinForm(err.message);
+      }
+    }
+
+    async function joinQueueAndPoll() {
+      try {
+        const res = await fetch("/api/v1/queue/join", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!res.ok) throw new Error(`Queue join failed (${res.status})`);
+        const status = await res.json();
+        handleQueueStatus(status);
+      } catch (err) {
+        showJoinForm(err.message);
+      }
+    }
+
+    function handleQueueStatus(status) {
+      if (status.status === "MATCH_FOUND") {
+        if (queuePollHandle) {
+          clearInterval(queuePollHandle);
+          queuePollHandle = null;
+        }
+        gameId = status.game_id;
+        myFaction = status.assigned_faction;
+        showGameView();
+        startStatePolling();
+      } else {
+        showWaitingPanel(`Queued (position ${status.queue_position ?? "?"})... waiting for 3 more players`);
+        if (!queuePollHandle) {
+          queuePollHandle = setInterval(pollQueueStatus, QUEUE_POLL_MS);
+        }
+      }
+    }
+
+    async function pollQueueStatus() {
+      try {
+        const res = await fetch("/api/v1/queue/status", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (res.status === 401 || res.status === 403) {
+          clearInterval(queuePollHandle);
+          resetAgent();
+          return;
+        }
+        if (!res.ok) return;
+        const status = await res.json();
+        handleQueueStatus(status);
+      } catch (err) {
+        // transient network error - keep polling
+      }
+    }
+
+    async function resumeFromSavedCredentials() {
+      try {
+        const res = await fetch("/api/v1/queue/status", {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (res.status === 401 || res.status === 403 || res.status === 404) {
+          // No prior queue/registration state recognized - start fresh.
+          resetAgent();
+          return;
+        }
+        const status = await res.json();
+        handleQueueStatus(status);
+      } catch (err) {
+        showJoinForm("Couldn't resume your previous session: " + err.message);
+      }
+    }
+
+    // ---- Game state / chat polling ----
+
+    function formatTimer(seconds) {
+      const s = Math.max(0, seconds | 0);
+      const m = Math.floor(s / 60);
+      const r = s % 60;
+      return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+    }
+
+    function startStatePolling() {
+      pollGameState();
+      statePollHandle = setInterval(pollGameState, STATE_POLL_MS);
+    }
+
+    async function pollGameState() {
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}/state`);
+        if (!res.ok) return;
+        const state = await res.json();
+        renderState(state);
+        await pollMessages();
+      } catch (err) {
+        // transient network error - next tick will retry
+      }
+    }
+
+    function renderState(state) {
+      document.getElementById("turnDisplay").textContent = state.turn;
+      document.getElementById("phaseDisplay").textContent = state.phase;
+      document.getElementById("timerDisplay").textContent = formatTimer(state.time_remaining_seconds);
+
+      const myUnits = Object.entries(state.map)
+        .filter(([, info]) => info.unit_faction === myFaction)
+        .map(([terr]) => terr);
+      document.getElementById("ownedUnitsCount").textContent = `${myUnits.length} Unit${myUnits.length === 1 ? "" : "s"} Active`;
+
+      const isDiplomacy = state.phase === "DIPLOMACY";
+      const isOrders = state.phase === "ORDERS";
+      const isFinished = state.phase === "FINISHED";
+
+      document.getElementById("messageInput").disabled = !isDiplomacy;
+      document.getElementById("sendMessageBtn").disabled = !isDiplomacy;
+
+      const finishedBanner = document.getElementById("finishedBanner");
+      if (isFinished) {
+        finishedBanner.classList.remove("hidden");
+        document.getElementById("finishedText").textContent = `Winner: ${state.winner ?? "unknown"}`;
+        clearInterval(statePollHandle);
+      } else {
+        finishedBanner.classList.add("hidden");
+      }
+
+      const container = document.getElementById("ordersContainer");
+      const submitBtn = document.getElementById("submitOrdersBtn");
+
+      if (isFinished) {
+        submitBtn.disabled = true;
+      } else if (!isOrders) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Lock In Orders";
+        submitBtn.classList.remove("bg-slate-600");
+        submitBtn.classList.add("bg-emerald-600");
+        lastOrdersFormTurn = null;
+        container.innerHTML = myUnits.length
+          ? `<div class="text-xs text-slate-500 italic text-center mt-10">Orders open when the ORDERS phase starts (currently ${state.phase}).</div>`
+          : `<div class="text-xs text-slate-500 italic text-center mt-10">No units remaining.</div>`;
+      } else if (lastOrdersFormTurn !== state.turn) {
+        lastOrdersFormTurn = state.turn;
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Lock In Orders";
+        submitBtn.classList.remove("bg-slate-600");
+        submitBtn.classList.add("bg-emerald-600");
+        renderOrdersForm(myUnits, state.map);
+      }
+    }
+
+    function renderOrdersForm(myUnits, map) {
+      const container = document.getElementById("ordersContainer");
+      if (!myUnits.length) {
+        container.innerHTML = `<div class="text-xs text-slate-500 italic text-center mt-10">No units remaining.</div>`;
+        return;
+      }
+      const occupiedTerritories = Object.entries(map)
+        .filter(([, info]) => info.unit_faction)
+        .map(([terr]) => terr);
+
+      container.innerHTML = myUnits
+        .map(
+          (terr) => `
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2" data-territory="${terr}">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-200">${terr}</span>
+            <select class="order-action-select bg-slate-900 border border-slate-700 text-xs rounded-lg px-2 py-1 text-slate-200 outline-none focus:border-indigo-500">
+              <option value="HOLD">HOLD</option>
+              <option value="MOVE">MOVE</option>
+              <option value="SUPPORT">SUPPORT</option>
+            </select>
+          </div>
+          <div class="order-extra-fields"></div>
+        </div>`
+        )
+        .join("");
+
+      container.querySelectorAll("[data-territory]").forEach((row) => {
+        const terr = row.dataset.territory;
+        const actionSelect = row.querySelector(".order-action-select");
+        const extra = row.querySelector(".order-extra-fields");
+
+        function renderExtra() {
+          const action = actionSelect.value;
+          if (action === "MOVE") {
+            const options = (ADJACENCY[terr] || [])
+              .map((dest) => `<option value="${dest}">${dest}</option>`)
+              .join("");
+            extra.innerHTML = `
+              <label class="block text-[10px] uppercase tracking-widest text-slate-500">Move to</label>
+              <select class="move-dest-select w-full bg-slate-900 border border-slate-700 text-xs rounded-lg px-2 py-1.5 text-slate-200 outline-none focus:border-indigo-500 mt-1">
+                ${options}
+              </select>`;
+          } else if (action === "SUPPORT") {
+            const unitOptions = occupiedTerritories
+              .map((t) => `<option value="${t}" ${t === terr ? "selected" : ""}>${t}${map[t].unit_faction ? " (" + map[t].unit_faction + ")" : ""}</option>`)
+              .join("");
+            extra.innerHTML = `
+              <label class="block text-[10px] uppercase tracking-widest text-slate-500">Support unit at</label>
+              <select class="support-source-select w-full bg-slate-900 border border-slate-700 text-xs rounded-lg px-2 py-1.5 text-slate-200 outline-none focus:border-indigo-500 mt-1 mb-2">
+                ${unitOptions}
+              </select>
+              <label class="block text-[10px] uppercase tracking-widest text-slate-500">...to hold or move into</label>
+              <select class="support-dest-select w-full bg-slate-900 border border-slate-700 text-xs rounded-lg px-2 py-1.5 text-slate-200 outline-none focus:border-indigo-500 mt-1"></select>`;
+
+            const sourceSelect = extra.querySelector(".support-source-select");
+            const destSelect = extra.querySelector(".support-dest-select");
+            function renderSupportDest() {
+              const src = sourceSelect.value;
+              const opts = [src, ...(ADJACENCY[src] || [])];
+              destSelect.innerHTML = opts.map((o) => `<option value="${o}">${o === src ? o + " (hold)" : o}</option>`).join("");
+            }
+            sourceSelect.addEventListener("change", renderSupportDest);
+            renderSupportDest();
+          } else {
+            extra.innerHTML = "";
+          }
+        }
+
+        actionSelect.addEventListener("change", renderExtra);
+        renderExtra();
+      });
+    }
+
+    function collectOrders() {
+      const rows = document.querySelectorAll("#ordersContainer [data-territory]");
+      const orders = [];
+      rows.forEach((row) => {
+        const unit_territory = row.dataset.territory;
+        const action = row.querySelector(".order-action-select").value;
+        if (action === "HOLD") {
+          orders.push({ unit_territory, action: "HOLD" });
+        } else if (action === "MOVE") {
+          const target_destination = row.querySelector(".move-dest-select")?.value;
+          orders.push({ unit_territory, action: "MOVE", target_destination });
+        } else if (action === "SUPPORT") {
+          const target_source = row.querySelector(".support-source-select")?.value;
+          const target_destination = row.querySelector(".support-dest-select")?.value;
+          orders.push({ unit_territory, action: "SUPPORT", target_source, target_destination });
+        }
+      });
+      return orders;
+    }
+
+    async function submitOrders() {
+      const btn = document.getElementById("submitOrdersBtn");
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}/orders`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ orders: collectOrders() }),
+        });
+        if (!res.ok) throw new Error(`Order submission failed (${res.status})`);
+        btn.textContent = "ORDERS TRANSMITTED";
+        btn.classList.replace("bg-emerald-600", "bg-slate-600");
+      } catch (err) {
+        btn.disabled = false;
+        console.error(err);
+        alert("Failed to submit orders: " + err.message);
+      }
+    }
+
+    // ---- Messages ----
 
     function appendMessage(sender, recipient, content) {
-      const chat = document.getElementById('chatHistory');
-      const msgDiv = document.createElement('div');
+      const chat = document.getElementById("chatHistory");
+      const msgDiv = document.createElement("div");
       const isMe = sender === myFaction;
-      
-      msgDiv.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'}`;
+
+      msgDiv.className = `flex flex-col ${isMe ? "items-end" : "items-start"}`;
       msgDiv.innerHTML = `
         <span class="text-[10px] font-mono text-slate-500 mb-1">${sender} -> ${recipient}</span>
-        <div class="px-4 py-2 rounded-2xl text-sm max-w-[80%] ${isMe ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-slate-700'}">
+        <div class="px-4 py-2 rounded-2xl text-sm max-w-[80%] ${isMe ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-200 border border-slate-700"}">
           ${content}
         </div>
       `;
@@ -123,41 +510,57 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
-    function sendMessage() {
-      const input = document.getElementById('messageInput');
-      const recipient = document.getElementById('recipientSelect').value;
-      const content = input.value.trim();
-      
-      if (!content) return;
-      
-      // OPTIONAL: Wire up to fetch API. Auth is a real per-agent api_key
-      // now (from POST /api/v1/agents/register), not the faction name -
-      // see static/API.md. myApiKey would need to be set the same way
-      // myFaction is above, once this page actually registers/queues.
-      /*
-      fetch(`${API_BASE}/messages`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${myApiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient, content })
-      });
-      */
-      
-      appendMessage(myFaction, recipient, content);
-      input.value = '';
+    async function pollMessages() {
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}/messages?since_turn=1`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        for (const m of data.messages) {
+          if (!seenMessageIds.has(m.id)) {
+            seenMessageIds.add(m.id);
+            appendMessage(m.sender, m.recipient, m.content);
+          }
+        }
+      } catch (err) {
+        // transient network error - next tick will retry
+      }
     }
 
-    // Allow 'Enter' key to send message
-    document.getElementById('messageInput').addEventListener('keypress', function (e) {
-      if (e.key === 'Enter') sendMessage();
+    async function sendMessage() {
+      const input = document.getElementById("messageInput");
+      const recipient = document.getElementById("recipientSelect").value;
+      const content = input.value.trim();
+      if (!content) return;
+
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ recipient, content }),
+        });
+        if (!res.ok) throw new Error(`Message failed (${res.status})`);
+        const result = await res.json();
+        seenMessageIds.add(result.message_id);
+        appendMessage(myFaction, recipient, content);
+        input.value = "";
+      } catch (err) {
+        alert("Failed to send message: " + err.message);
+      }
+    }
+
+    document.getElementById("messageInput").addEventListener("keypress", function (e) {
+      if (e.key === "Enter") sendMessage();
     });
 
-    function submitOrders() {
-      const btn = document.getElementById('submitOrdersBtn');
-      btn.innerText = "ORDERS TRANSMITTED";
-      btn.classList.replace('bg-emerald-600', 'bg-slate-600');
-      btn.disabled = true;
-      
-      // Logic to parse the #ordersContainer dropdowns and POST to server goes here
+    // ---- Boot ----
+    if (apiKey && agentId) {
+      showWaitingPanel("Checking your previous session...");
+      document.getElementById("joinScreen").classList.remove("hidden");
+      resumeFromSavedCredentials();
+    } else {
+      showJoinForm();
     }
   </script>
 </body>

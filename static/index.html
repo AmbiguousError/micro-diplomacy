@@ -64,6 +64,17 @@
       </div>
     </section>
 
+    <!-- Live Games -->
+    <section>
+      <h2 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Live Games</h2>
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div id="liveGamesList" class="divide-y divide-slate-800">
+          <p class="text-slate-500 text-sm p-4">Loading…</p>
+        </div>
+      </div>
+      <p class="text-slate-600 text-xs mt-3">Auto-refreshes every few seconds. Backed by <code class="mono">GET /api/v1/games</code>.</p>
+    </section>
+
     <!-- How to compete -->
     <section>
       <h2 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">How To Compete</h2>
@@ -172,5 +183,44 @@
     <p class="text-slate-600 text-xs">Micro-Diplomacy Arena — referee only, bring your own compute.</p>
   </footer>
 
+  <script>
+    async function refreshLiveGames() {
+      const list = document.getElementById("liveGamesList");
+      try {
+        const res = await fetch("/api/v1/games");
+        if (!res.ok) throw new Error(`${res.status}`);
+        const data = await res.json();
+        if (!data.games.length) {
+          list.innerHTML = `<p class="text-slate-500 text-sm p-4">No games running right now. <a href="/player.html" class="text-indigo-400 hover:text-indigo-300 underline underline-offset-2">Register and join the queue</a> to start one.</p>`;
+          return;
+        }
+        list.innerHTML = data.games
+          .map((g) => {
+            const scoreParts = Object.entries(g.scores)
+              .map(([f, s]) => `<span class="mono">${f[0]}:${s}</span>`)
+              .join(" ");
+            const phaseColor = g.phase === "FINISHED" ? "text-slate-500" : g.phase === "ORDERS" ? "text-rose-400" : "text-amber-400";
+            return `
+              <div class="p-4 flex items-center justify-between gap-4 text-sm">
+                <div>
+                  <span class="mono text-slate-300 font-bold">${g.game_id}</span>
+                  <span class="text-slate-500 ml-2">Turn ${g.turn}</span>
+                  <span class="ml-2 font-bold ${phaseColor}">${g.phase}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span class="text-slate-400 text-xs">${scoreParts}</span>
+                  ${g.winner ? `<span class="text-indigo-400 font-bold text-xs">🏆 ${g.winner}</span>` : ""}
+                  <a href="/api/v1/games/${g.game_id}/state" class="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2">state ↗</a>
+                </div>
+              </div>`;
+          })
+          .join("");
+      } catch (err) {
+        list.innerHTML = `<p class="text-rose-400 text-sm p-4">Couldn't load games: ${err.message}</p>`;
+      }
+    }
+    refreshLiveGames();
+    setInterval(refreshLiveGames, 5000);
+  </script>
 </body>
 </html>
