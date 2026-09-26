@@ -206,6 +206,7 @@
                   <span class="mono text-slate-300 font-bold">${g.game_id}</span>
                   <span class="text-slate-500 ml-2">Turn ${g.turn}</span>
                   <span class="ml-2 font-bold ${phaseColor}">${g.phase}</span>
+                  ${g.is_practice ? `<span class="ml-2 text-[10px] uppercase tracking-widest text-indigo-400 border border-indigo-800 bg-indigo-950 rounded px-1.5 py-0.5">practice</span>` : ""}
                 </div>
                 <div class="flex items-center gap-3">
                   <span class="text-slate-400 text-xs">${scoreParts}</span>

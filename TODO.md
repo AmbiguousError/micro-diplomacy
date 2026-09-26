@@ -475,13 +475,14 @@ more than adding an import:
       in-progress match instead of losing it; a finished-game banner with
       a "Register New Agent" reset. Two honest gaps this surfaced, not
       fixed here:
-      - **There's no way to leave the queue.** `app/server_hub.py`'s
-        `matchmaking_queue` only ever pops agents once 4 accumulate — there
-        is no "leave queue" endpoint, so a solo human who registers and
-        joins genuinely queues forever until 3 more agents (human or bot)
-        join too. The UI is honest about this ("waiting for 3 more
-        players") but can't offer a cancel button because the server has
-        nothing to cancel into.
+      - **There's still no way to leave the *real* queue.**
+        `app/server_hub.py`'s `matchmaking_queue` only ever pops agents
+        once 4 accumulate — there is no "leave queue" endpoint, so a solo
+        human who clicks "Find Match" genuinely queues forever until 3
+        more real agents join too. Addressed *practically* (not fixed
+        directly) by the practice-match feature below — anyone stuck can
+        just click "Practice vs Bots" instead — but the underlying
+        limitation on the real queue is still there.
       - Confirmed **`static/leaderboard.html` is 100% fake** — `mockData`
         is a hardcoded array, there is no `GET /api/v1/leaderboard`
         endpoint, and `AgentRecord.elo_rating` (`app/server_hub.py`) is
@@ -491,6 +492,61 @@ more than adding an import:
         canonical-rating-system item below) and persist the result
         somewhere queryable — a meaningfully larger task than this item,
         not attempted here.
+- [x] **Add a practice-match mode (`POST /api/v1/practice`).** *(Done —
+      the direct fix for the "solo human queues forever" gap above: lets
+      anyone play immediately against the existing archetype bots
+      (`app/archetypes.py` — the same ones the gauntlet already uses)
+      instead of waiting for 3 more real agents. Verified rigorously with
+      jsdom against the real live server, waiting through real 120s/30s
+      phase timers: practice match starts instantly (no queue wait);
+      bot-generated diplomacy messages genuinely round-trip through the
+      real messages pipeline (confirmed `PacifistTurtle`'s exact message
+      text appearing in chat); and — the most important check — **both
+      `OpportunisticGreedy` bots assigned that turn independently and
+      correctly grabbed adjacent neutral Supply Centers in the same real
+      turn resolution as the human's own submitted order** (`Red:
+      Northreach→Centerlands`, `Green: Sunport→Southvale`), proving bots
+      genuinely drive multiple simultaneous factions, not just one. Also
+      verified clicking "Practice" again mid-match doesn't spawn a second
+      game. Full backend test suite still 5/5 throughout.)*
+      `GameSession` gained `bot_factions: Dict[faction, archetype_class_name]`
+      (persisted like everything else) and two methods:
+      `run_bot_diplomacy()` (called once per turn at DIPLOMACY start) and
+      `run_bot_orders()` (called once per turn at ORDERS start, so bot
+      orders are already present in `self.orders` before the real timer
+      elapses and `resolve_turn()` reads it — no special-casing needed in
+      `resolve_turn()` itself). Both convert the session's map to a
+      `SimState` via a new `SimState.from_territory_map()` classmethod
+      (`app/mcts.py`) — the missing inverse of `FastAdjudicator.step()`'s
+      existing conversion — so the archetypes' existing `SimState`-shaped
+      interface didn't need to change at all.
+      The new endpoint reuses `server_hub.assigned_matches` (the exact
+      same structure the real matchmaker populates), so every existing
+      per-game auth/messages/orders code path (`get_authorized_faction()`
+      etc.) needed zero changes. Deliberately allows starting a *new*
+      practice match with the same identity once a previous *practice*
+      match has finished (checked via `bot_factions` + `phase ==
+      FINISHED`) — real matches still don't support this, consistent with
+      the existing "once matched, always matched" limitation.
+      `static/player.html` gained a "Practice vs Bots" button (shares a
+      registration helper with "Find Match" rather than duplicating it), a
+      bot-opponents indicator in the header (archetype names
+      humanized: `MachiavellianTraitor` → "Machiavellian Traitor"), and a
+      "Practice Again" option on the finished-game banner (real matches
+      still only offer "Register New Agent", since they can't be
+      restarted). Fixed a real bug caught before it ever shipped: reusing
+      the same page/identity for "Practice Again" would have carried over
+      stale per-game client state (`seenMessageIds`, old chat DOM) into
+      the new game, since server-assigned message ids are only unique
+      *within* a single game — `showGameView()` now resets all of that
+      whenever a new game is actually entered.
+      `GET /api/v1/games` gained an `is_practice` boolean per game
+      (surfaced as a small tag in `static/index.html`'s "Live Games"
+      list); `GET .../state`'s `bot_factions` field is included publicly
+      so any client can be honest about which opponents are simulated.
+      Also retroactively documented `caster_script` in `static/API.md`,
+      which had been added to the API earlier this session but never
+      written up there.
 - [x] **Add `GET /api/v1/games`.** *(Done, small addition alongside the
       above — there was previously no way to see what games exist at all
       without direct DB access; you had to already know a `game_id`.)*

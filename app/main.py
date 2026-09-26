@@ -1,4 +1,7 @@
 import asyncio
+import random
+import secrets
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -6,10 +9,18 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from . import server_hub
+from .archetypes import MachiavellianTraitor, OpportunisticGreedy, PacifistTurtle, StochasticChaos
 from .db import init_db, load_all_game_states, save_game_state
 from .dual_caster import DualShoutcasterService
 from .gauntlet_router import router as gauntlet_router
-from .mcts import Adjudicator, FACTIONS, Order, Phase, STARTING_POSITIONS, SUPPLY_CENTERS, TerritoryState, GameState, ADJACENCY
+from .mcts import Adjudicator, FACTIONS, Order, Phase, STARTING_POSITIONS, SUPPLY_CENTERS, TerritoryState, GameState, ADJACENCY, SimState
+
+ARCHETYPE_CLASSES = {
+    "PacifistTurtle": PacifistTurtle,
+    "OpportunisticGreedy": OpportunisticGreedy,
+    "MachiavellianTraitor": MachiavellianTraitor,
+    "StochasticChaos": StochasticChaos,
+}
 
 # =====================================================================
 # MODELS & GAME LOOP
@@ -38,6 +49,10 @@ class GameSession:
         self.orders: Dict[str, List[Order]] = {f: [] for f in FACTIONS}
         self.recent_events: List[str] = ["Game started."]
         self.caster_script: List[Dict[str, str]] = []
+        # Non-empty only for practice matches (POST /api/v1/practice):
+        # faction -> archetype class name, for factions controlled by a
+        # built-in bot instead of a real registered agent.
+        self.bot_factions: Dict[str, str] = {}
 
         self.map: Dict[str, TerritoryState] = {
             t: TerritoryState(sc_owner=None, unit_faction=None) for t in ADJACENCY
@@ -53,10 +68,41 @@ class GameSession:
                 scores[state.sc_owner] += 1
         return scores
 
+    def run_bot_diplomacy(self):
+        """Has every bot faction generate and post its diplomacy messages
+        for the current turn. Called once per turn, at DIPLOMACY start."""
+        if not self.bot_factions:
+            return
+        sim_state = SimState.from_territory_map(self.map, self.turn)
+        for faction, archetype_name in self.bot_factions.items():
+            bot = ARCHETYPE_CLASSES[archetype_name](faction)
+            for msg in bot.generate_messages(self.turn, sim_state):
+                self.messages.append(Message(
+                    id=f"msg_{len(self.messages) + 1}",
+                    turn=self.turn,
+                    sender=faction,
+                    recipient=msg["recipient"],
+                    content=msg["content"],
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                ))
+
+    def run_bot_orders(self):
+        """Has every bot faction generate its orders for the current turn,
+        so they're already present in self.orders before the real ORDERS
+        timer elapses and resolve_turn() reads it. Called once per turn,
+        at ORDERS start."""
+        if not self.bot_factions:
+            return
+        sim_state = SimState.from_territory_map(self.map, self.turn)
+        for faction, archetype_name in self.bot_factions.items():
+            bot = ARCHETYPE_CLASSES[archetype_name](faction)
+            self.orders[faction] = bot.generate_orders(self.turn, sim_state)
+
     def step_phase(self):
         if self.phase == Phase.DIPLOMACY:
             self.phase = Phase.ORDERS
             self.time_remaining = 30
+            self.run_bot_orders()
         elif self.phase == Phase.ORDERS:
             self.resolve_turn()
 
@@ -83,6 +129,7 @@ class GameSession:
         self.turn += 1
         self.phase = Phase.DIPLOMACY
         self.time_remaining = 120
+        self.run_bot_diplomacy()
 
     def to_state(self) -> Dict[str, Any]:
         """Serializes this session to a JSON-safe dict for persistence."""
@@ -94,6 +141,7 @@ class GameSession:
             "messages": [m.model_dump() for m in self.messages],
             "orders": {f: [o.model_dump() for o in orders] for f, orders in self.orders.items()},
             "recent_events": self.recent_events,
+            "bot_factions": self.bot_factions,
             "caster_script": self.caster_script,
             "map": {terr: ts.model_dump() for terr, ts in self.map.items()},
         }
@@ -106,6 +154,7 @@ class GameSession:
         self.winner = state.get("winner")
         self.messages = [Message(**m) for m in state.get("messages", [])]
         self.orders = {f: [Order(**o) for o in orders] for f, orders in state.get("orders", {}).items()}
+        self.bot_factions = state.get("bot_factions", {})
         self.caster_script = state.get("caster_script", [])
         self.recent_events = state.get("recent_events", [])
         self.map = {terr: TerritoryState(**ts) for terr, ts in state.get("map", {}).items()}
@@ -206,10 +255,50 @@ def list_games():
                 "phase": g.phase,
                 "scores": g.calculate_scores(),
                 "winner": g.winner,
+                "is_practice": bool(g.bot_factions),
             }
             for g in games.values()
         ]
     }
+
+@app.post("/api/v1/practice")
+async def start_practice_match(agent: server_hub.AgentRecord = Depends(server_hub.authenticate_agent)):
+    """
+    Starts a real GameSession immediately, filling the other 3 factions
+    with built-in archetype bots (app/archetypes.py) instead of waiting
+    for 3 more real agents in the matchmaking queue - see TODO.md: there's
+    no way to leave that queue once joined, and matches only form once 4
+    real agents are waiting, so a solo visitor previously had no way to
+    actually experience a game. Reuses server_hub.assigned_matches (the
+    same structure the real matchmaker populates) so every existing
+    per-game auth/messages/orders code path works unchanged.
+    """
+    existing = server_hub.assigned_matches.get(agent.agent_id)
+    if existing:
+        existing_game = games.get(existing["game_id"])
+        was_finished_practice = (
+            existing_game and existing_game.bot_factions and existing_game.phase == Phase.FINISHED
+        )
+        if not was_finished_practice:
+            raise HTTPException(status_code=409, detail="Your agent is already assigned to a game.")
+
+    game_id = f"practice_{secrets.token_hex(4)}"
+    factions_shuffled = FACTIONS.copy()
+    random.shuffle(factions_shuffled)
+    human_faction = factions_shuffled[0]
+    bot_faction_names = factions_shuffled[1:]
+
+    game = await spawn_game(game_id)
+    game.bot_factions = {f: random.choice(list(ARCHETYPE_CLASSES.keys())) for f in bot_faction_names}
+    game.run_bot_diplomacy()
+    await save_game_state(game_id, game.to_state())
+
+    server_hub.assigned_matches[agent.agent_id] = {
+        "game_id": game_id,
+        "faction": human_faction,
+        "timestamp": time.time(),
+    }
+    return {"status": "MATCH_FOUND", "game_id": game_id, "assigned_faction": human_faction}
 
 @app.get("/api/v1/games/{game_id}/state", response_model=GameState)
 def get_state(game_id: str):
@@ -226,6 +315,7 @@ def get_state(game_id: str):
         winner=game.winner,
         recent_events=game.recent_events,
         caster_script=game.caster_script,
+        bot_factions=game.bot_factions,
     )
 
 @app.post("/api/v1/games/{game_id}/messages", status_code=201)

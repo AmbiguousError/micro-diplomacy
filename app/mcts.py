@@ -74,6 +74,11 @@ class GameState(BaseModel):
     # app/dual_caster.py) - text only, no synthesized audio (Piper TTS
     # isn't wired in). Empty if generation hasn't run yet or last failed.
     caster_script: List[Dict[str, str]] = []
+    # Non-empty only for practice matches (see POST /api/v1/practice):
+    # faction -> archetype class name for every faction controlled by a
+    # built-in bot rather than a real registered agent. Exposed publicly
+    # so clients can be honest about which opponents are simulated.
+    bot_factions: Dict[str, str] = {}
 
 # =====================================================================
 # 3. ADJUDICATION ALGORITHM
@@ -260,6 +265,16 @@ class SimState:
             winners = [f for f, s in scores.items() if s == top_score]
             return True, "/".join(winners)
         return False, None
+
+    @classmethod
+    def from_territory_map(cls, territory_map: Dict[str, "TerritoryState"], turn: int) -> "SimState":
+        """The inverse of FastAdjudicator.step()'s internal conversion - lets
+        code holding a full GameSession's map (app/main.py) query an
+        archetype bot (app/archetypes.py), which only knows how to read a
+        SimState, without needing its own copy of this conversion."""
+        map_units = {t: ts.unit_faction for t, ts in territory_map.items() if ts.unit_faction}
+        map_sc = {t: (ts.sc_owner or "Neutral") for t, ts in territory_map.items() if t in SUPPLY_CENTERS}
+        return cls(turn=turn, map_units=map_units, map_sc=map_sc)
 
 
 class FastAdjudicator:

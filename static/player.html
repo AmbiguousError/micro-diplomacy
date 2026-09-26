@@ -27,9 +27,13 @@
         <input type="text" id="displayNameInput" placeholder="e.g. Napoleon_42" maxlength="32"
                class="w-full bg-slate-950 border border-slate-700 text-sm rounded-lg px-4 py-2.5 text-white outline-none focus:border-indigo-500 transition mb-2" autocomplete="off">
         <p id="joinError" class="text-rose-400 text-xs mb-3 hidden"></p>
-        <button id="joinBtn" onclick="handleJoinClick()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20">
+        <button id="joinBtn" onclick="handleJoinClick()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20 mb-2">
           Find Match
         </button>
+        <button id="practiceBtn" onclick="handlePracticeClick()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 rounded-xl text-sm transition">
+          Practice vs Bots
+        </button>
+        <p class="text-slate-600 text-[11px] mt-2 text-center">Practice starts instantly against 3 built-in bots. Find Match waits for 3 other real agents.</p>
       </div>
 
       <div id="waitingPanel" class="hidden text-center">
@@ -48,7 +52,10 @@
         <p class="text-[10px] uppercase tracking-widest text-indigo-400 font-bold">Game Over</p>
         <p class="text-lg font-black text-white" id="finishedText">Winner: -</p>
       </div>
-      <button onclick="resetAgent()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-4 py-2 rounded-lg transition">Register New Agent</button>
+      <div class="flex items-center gap-2">
+        <button id="practiceAgainBtn" onclick="handlePracticeClick()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-lg transition">Practice Again</button>
+        <button onclick="resetAgent()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-4 py-2 rounded-lg transition">Register New Agent</button>
+      </div>
     </div>
 
     <!-- Header: Game Status & Phase -->
@@ -56,6 +63,7 @@
       <div>
         <h1 class="text-3xl font-black uppercase tracking-wider text-white">Command Deck</h1>
         <p class="text-slate-400 text-sm mt-1">Playing as <span id="myFactionLabel" class="font-bold">-</span> in <span id="gameIdLabel" class="font-mono text-slate-500">-</span></p>
+        <p id="botOpponentsLabel" class="hidden text-[11px] text-indigo-400 mt-1"></p>
       </div>
       <div class="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner">
         <div class="text-center px-4 border-r border-slate-700">
@@ -201,6 +209,20 @@
       gv.classList.add("flex");
       document.getElementById("myFactionLabel").textContent = myFaction;
       document.getElementById("gameIdLabel").textContent = gameId;
+
+      // Reset per-game client state - important for "Practice Again", which
+      // reuses the same identity/DOM for a brand-new game: without this,
+      // seenMessageIds from the previous (finished) game would incorrectly
+      // suppress the new game's own "msg_1", "msg_2", ... (message ids are
+      // only unique within a single game), and old chat/finished-banner
+      // state would still be showing.
+      seenMessageIds = new Set();
+      lastOrdersFormTurn = null;
+      document.getElementById("chatHistory").innerHTML =
+        '<div class="text-xs text-slate-500 italic text-center">-- Secure Channel Established --</div>';
+      document.getElementById("finishedBanner").classList.add("hidden");
+      document.getElementById("practiceAgainBtn").classList.add("hidden");
+      document.getElementById("botOpponentsLabel").classList.add("hidden");
     }
 
     function resetAgent() {
@@ -209,14 +231,17 @@
       window.location.reload();
     }
 
-    async function handleJoinClick() {
-      const nameInput = document.getElementById("displayNameInput");
-      const name = nameInput.value.trim();
+    // Registers this browser as an agent if it isn't already (shared by
+    // "Find Match" and "Practice vs Bots" - "Practice Again" skips this
+    // entirely since apiKey is already set at that point).
+    async function ensureRegistered(disableBtnId) {
+      if (apiKey) return true;
+      const name = document.getElementById("displayNameInput").value.trim();
       if (name.length < 3) {
         showJoinForm("Display name must be at least 3 characters.");
-        return;
+        return false;
       }
-      document.getElementById("joinBtn").disabled = true;
+      document.getElementById(disableBtnId).disabled = true;
       try {
         const res = await fetch("/api/v1/agents/register", {
           method: "POST",
@@ -229,11 +254,22 @@
         agentId = record.agent_id;
         localStorage.setItem("mdApiKey", apiKey);
         localStorage.setItem("mdAgentId", agentId);
-        await joinQueueAndPoll();
+        return true;
       } catch (err) {
-        document.getElementById("joinBtn").disabled = false;
+        document.getElementById(disableBtnId).disabled = false;
         showJoinForm(err.message);
+        return false;
       }
+    }
+
+    async function handleJoinClick() {
+      if (!(await ensureRegistered("joinBtn"))) return;
+      await joinQueueAndPoll();
+    }
+
+    async function handlePracticeClick() {
+      if (!(await ensureRegistered("practiceBtn"))) return;
+      await startPracticeMatch();
     }
 
     async function joinQueueAndPoll() {
@@ -245,6 +281,20 @@
         if (!res.ok) throw new Error(`Queue join failed (${res.status})`);
         const status = await res.json();
         handleQueueStatus(status);
+      } catch (err) {
+        showJoinForm(err.message);
+      }
+    }
+
+    async function startPracticeMatch() {
+      try {
+        const res = await fetch("/api/v1/practice", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || `Practice match failed (${res.status})`);
+        handleQueueStatus(body);
       } catch (err) {
         showJoinForm(err.message);
       }
@@ -346,10 +396,25 @@
       document.getElementById("messageInput").disabled = !isDiplomacy;
       document.getElementById("sendMessageBtn").disabled = !isDiplomacy;
 
+      const botOpponentsLabel = document.getElementById("botOpponentsLabel");
+      const botFactions = state.bot_factions || {};
+      const isPractice = Object.keys(botFactions).length > 0;
+      if (isPractice) {
+        const desc = Object.entries(botFactions)
+          .map(([f, archetype]) => `${f} (${archetype.replace(/([a-z])([A-Z])/g, "$1 $2")})`)
+          .join(", ");
+        botOpponentsLabel.textContent = `Practice match — bots: ${desc}`;
+        botOpponentsLabel.classList.remove("hidden");
+      } else {
+        botOpponentsLabel.classList.add("hidden");
+      }
+
       const finishedBanner = document.getElementById("finishedBanner");
+      const practiceAgainBtn = document.getElementById("practiceAgainBtn");
       if (isFinished) {
         finishedBanner.classList.remove("hidden");
         document.getElementById("finishedText").textContent = `Winner: ${state.winner ?? "unknown"}`;
+        practiceAgainBtn.classList.toggle("hidden", !isPractice);
         clearInterval(statePollHandle);
       } else {
         finishedBanner.classList.add("hidden");
