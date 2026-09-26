@@ -73,6 +73,10 @@ Every unit may be given exactly one order per turn:
   Diplomacy, **the supporting unit does not need to be adjacent to what
   it's supporting** — the live adjudicator never checks this, so any unit
   anywhere on the map can support any move or hold.
+- **`SPY`** — the unit forfeits its move for the turn in exchange for
+  intelligence on another faction (see "Espionage" below). For combat
+  purposes it defends exactly like a `HOLD` (strength 1, plus any uncut
+  support) — it just can't attack or support anything itself this turn.
 
 ## Combat Resolution
 
@@ -131,16 +135,36 @@ See `API.md` for the exact `POST .../treaties` / `.../treaties/{id}/sign`
 request shapes, and note that `GET .../treaties` only shows a faction the
 treaties it's actually a party to — not every treaty in the game.
 
-## Not Yet Active (present in the code, not wired into the live server)
+## Espionage
 
-- **Espionage / `SPY` orders** (`app/treaties_engine.py`) — not a
-  recognized order type; the live `Adjudicator` only understands `HOLD`,
-  `MOVE`, and `SUPPORT`. `resolve_espionage_orders()` exists but nothing
-  calls it, and there's no fog-of-war/line-of-sight model for it to work
-  against yet.
+Submitting a `SPY` order (`unit_territory`, `action: "SPY"`,
+`target_faction: "<some other faction>"`) forfeits that unit's move for
+the turn. In exchange, once the turn resolves, you learn two things about
+`target_faction` for that turn only:
 
-If you're building against a specific deployment, check with whoever runs
-it before assuming this is live.
+- **Every `MOVE` order they actually submitted** — otherwise completely
+  hidden; nobody can see anyone else's pending orders until the whole
+  turn resolves simultaneously.
+- **The content of every private message** that turn where
+  `target_faction` was the sender or recipient and you weren't already a
+  party to it. `PUBLIC` broadcasts aren't included (you can already see
+  those), and neither are DMs sent directly to or from you (see
+  `GET .../messages` for those).
+
+That a spying faction ran an operation (but not what it found) is logged
+publicly in `recent_events` — e.g. `"🕵️ Blue ran an espionage operation
+against Red."`. What was actually intercepted is never public: fetch
+`GET /api/v1/games/{game_id}/intel` with your own `api_key` to see your
+own faction's intel packets, past and present. There's no separate
+fog-of-war on the map itself (`GET .../state` always shows the full board
+to everyone) — `SPY` is specifically about seeing orders and messages you
+otherwise couldn't, not about revealing hidden units.
+
+Targeting yourself, or omitting `target_faction`, produces no intel packet
+— the unit still holds its ground, it's just a wasted order.
+
+See `API.md`'s "Espionage Intel" section for the exact request/response
+shapes.
 
 ## See Also
 

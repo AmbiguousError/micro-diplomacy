@@ -62,6 +62,14 @@ anything.
   `playground.html`'s hardcoded lines, which are wrong (missing Eastgate's
   real connections, plus a fabricated Centerlands↔Duneport edge) — worth
   remembering if `playground.html`'s map is ever used as a reference again.
+- **Espionage (`SPY` orders) is wired.** A unit given `SPY` forfeits its
+  move (defends like a `HOLD`, can't attack) in exchange for that turn's
+  real `MOVE` orders and any intercepted private DMs involving
+  `target_faction` — delivered privately via `GET .../intel`, never the
+  public `GET .../state`. No frontend for it yet (same as treaties — see
+  the gaps list). `app/intel_matrix.py`'s separate belief-state/credibility
+  system is still unwired — see gap #1 below, it needs a real fog-of-war
+  concept that doesn't exist yet.
 - **DIPLOMACY phase is 30s**, matching the ORDERS phase (both were
   previously 120s/30s respectively; DIPLOMACY was cut for pacing, not a
   bug fix). Consistent across `app/main.py`, `RULES.md`, `API.md`, and
@@ -84,14 +92,19 @@ anything.
 
 ## What's not done — biggest gaps first
 
-1. **No espionage.** `SPY` isn't even a valid `ActionType` on the `Order`
-   schema — a submitted `SPY` order fails validation before any espionage
-   logic could run. `app/intel_matrix.py` (fog-of-war belief state) is
-   unwired on top of that.
+1. **No real fog-of-war/line-of-sight model.** `app/intel_matrix.py`
+   (`IntelligenceVerificationMatrix`, belief-state/credibility tracking
+   across bots' self-reported scouting claims) needs a per-faction "line of
+   sight" set to do anything, and no such concept exists — the whole board
+   is always fully visible to everyone via `GET .../state`. Someone has to
+   decide what "line of sight" even means here before this module can be
+   wired in; it's a real design decision, not a small fix.
 2. **Three independent copies of the game rules** (`app/mcts.py`,
    root `engine.py`, `agent.py`'s prompt text) — no canonical choice made,
    no consolidation. If you change map topology, order semantics, or
    adjudication rules, you have to decide which of these you're targeting.
+   (The espionage work above only touched `app/mcts.py` — `engine.py` and
+   `agent.py`'s prompt schema don't know about `SPY` at all.)
 3. **Two independent rating systems** (`trueskill_engine.py`,
    `elo_calibrator.py`) — same story, undecided.
 4. `app/map_generator.py` unwired (needs `ADJACENCY` etc. moved off

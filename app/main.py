@@ -61,6 +61,11 @@ class GameSession:
         # built-in bot instead of a real registered agent.
         self.bot_factions: Dict[str, str] = {}
         self.treaty_engine = TreatyAndEspionageEngine()
+        # Intel packets from resolved SPY orders (app/treaties_engine.py's
+        # resolve_espionage_orders) - kept server-side only, never exposed
+        # via the public GET .../state; see GET .../intel, which filters to
+        # the requesting agent's own spying_faction.
+        self.intel_reports: List[Dict[str, Any]] = []
 
         self.map: Dict[str, TerritoryState] = {
             t: TerritoryState(sc_owner=None, unit_faction=None) for t in ADJACENCY
@@ -118,11 +123,19 @@ class GameSession:
         orders_as_dicts = {f: [o.model_dump() for o in orders] for f, orders in self.orders.items()}
         breach_events = self.treaty_engine.evaluate_orders_for_breaches(self.turn, orders_as_dicts)
 
+        turn_messages = [m.model_dump() for m in self.messages]
+        new_intel = self.treaty_engine.resolve_espionage_orders(self.turn, orders_as_dicts, turn_messages)
+        self.intel_reports.extend(new_intel)
+        espionage_events = [
+            f"🕵️ {p['spying_faction']} ran an espionage operation against {p['target_faction']}."
+            for p in new_intel
+        ]
+
         new_map, events = Adjudicator.adjudicate(
             self.map, self.orders, defensive_buffs=self.treaty_engine.defensive_buffs
         )
         self.map = new_map
-        self.recent_events = [b["message"] for b in breach_events] + events
+        self.recent_events = [b["message"] for b in breach_events] + espionage_events + events
         self.orders = {f: [] for f in FACTIONS}
 
         scores = self.calculate_scores()
@@ -157,6 +170,7 @@ class GameSession:
             "bot_factions": self.bot_factions,
             "caster_script": self.caster_script,
             "treaty_engine": self.treaty_engine.to_dict(),
+            "intel_reports": self.intel_reports,
             "map": {terr: ts.model_dump() for terr, ts in self.map.items()},
         }
 
@@ -170,6 +184,7 @@ class GameSession:
         self.orders = {f: [Order(**o) for o in orders] for f, orders in state.get("orders", {}).items()}
         self.bot_factions = state.get("bot_factions", {})
         self.treaty_engine = TreatyAndEspionageEngine.from_dict(state.get("treaty_engine", {}))
+        self.intel_reports = state.get("intel_reports", [])
         self.caster_script = state.get("caster_script", [])
         self.recent_events = state.get("recent_events", [])
         self.map = {terr: TerritoryState(**ts) for terr, ts in state.get("map", {}).items()}
@@ -437,6 +452,17 @@ async def sign_treaty(game_id: str, treaty_id: str, agent_faction: str = Depends
         raise HTTPException(status_code=400, detail="Treaty not found, already signed, or you are not its signatory")
     await save_game_state(game_id, game.to_state())
     return _treaty_to_dict(game.treaty_engine.active_treaties[treaty_id])
+
+@app.get("/api/v1/games/{game_id}/intel")
+def read_intel(game_id: str, agent_faction: str = Depends(get_authorized_faction)):
+    """Intel packets from this agent's own resolved SPY orders (see
+    app/treaties_engine.py::resolve_espionage_orders) - never exposed via
+    the public GET .../state, since the whole point is that it's secret."""
+    game = games.get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    visible = [r for r in game.intel_reports if r["spying_faction"] == agent_faction]
+    return {"intel": visible}
 
 @app.get("/api/v1/games/{game_id}/treaties")
 def list_treaties(game_id: str, agent_faction: str = Depends(get_authorized_faction)):

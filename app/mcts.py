@@ -49,6 +49,7 @@ class ActionType(str, Enum):
     HOLD = "HOLD"
     MOVE = "MOVE"
     SUPPORT = "SUPPORT"
+    SPY = "SPY"
 
 class Order(BaseModel):
     unit_territory: str
@@ -154,7 +155,7 @@ class Adjudicator:
                     buff = defensive_buffs.get(faction, {}).get(terr, 0)
                     holds[terr] = (faction, 1 + buff)
 
-            elif order.action in (ActionType.HOLD, ActionType.SUPPORT):
+            elif order.action in (ActionType.HOLD, ActionType.SUPPORT, ActionType.SPY):
                 support_bonus = sum(
                     1 for s_terr in uncut_supports
                     if active_orders[s_terr][1].target_source == terr

@@ -367,24 +367,90 @@ more than adding an import:
       Using generated maps requires refactoring those from module constants
       to per-`GameSession` instance state first — a real (if small)
       architectural change, not just calling the generator.
-- [ ] **`app/intel_matrix.py`.** `IntelligenceVerificationMatrix` needs a
-      per-faction "line of sight" set to do anything
-      (`synthesize_belief_state()` / `audit_ground_truth()` both take one as
-      a parameter), but no line-of-sight concept exists anywhere in the
-      current map/game model — it would need to be defined (e.g. adjacent
-      territories to owned units) before this module can be wired in.
-      There's a more upstream blocker too: `app/mcts.py`'s `ActionType`
-      enum only has `HOLD`/`MOVE`/`SUPPORT` — no `SPY`. `SPY` is referenced
-      by `app/treaties_engine.py::resolve_espionage_orders()` (checking
-      `order.get("action") == "SPY"` on plain dicts) and by
-      `app/swarm_agent.py`'s prompt text, but a real order submitted through
-      `POST /api/v1/games/{game_id}/orders` is validated against the strict
-      `Order.action: ActionType` enum — sending `"action": "SPY"` today
-      fails pydantic validation outright (`422`), before espionage logic
-      would ever run. `ActionType` needs a `SPY` member and
-      `Adjudicator.adjudicate()` needs to know to route it to the
-      espionage engine instead of treating it as a combat order, before any
-      of the line-of-sight work above is reachable at all.
+- [x] **Wire up `SPY` orders as a real espionage mechanic.** *(Done —
+      verified both with a live practice match over real HTTP (register →
+      practice match → submit a `SPY` order → wait for resolution → read
+      `GET .../intel`) and with a direct unit-level check of
+      `resolve_espionage_orders()` using a crafted third-party DM, so the
+      interception filtering itself is proven, not just the plumbing —
+      practice-match archetype bots never send private DMs to each other
+      (see `app/archetypes.py`: every `generate_messages()` only ever
+      addresses `"PUBLIC"`), so the live HTTP test alone couldn't exercise
+      that path.)*
+      Closed the upstream blocker first: `app/mcts.py`'s `ActionType` enum
+      only had `HOLD`/`MOVE`/`SUPPORT` — sending `"action": "SPY"` failed
+      pydantic validation (`422`) before `app/treaties_engine.py`'s
+      already-written (but unwired, and buggy) `resolve_espionage_orders()`
+      could ever run. Added `ActionType.SPY`, and added it to
+      `Adjudicator.adjudicate()`'s `HOLD`/`SUPPORT` bucket so a spying
+      unit still defends its own territory at strength 1 (+ support/buffs)
+      but contributes no attack — "forfeits a tactical move" per
+      `PROJECT_HANDOFF.md`.
+      Deliberately **did not** wire `app/intel_matrix.py`
+      (`IntelligenceVerificationMatrix`)'s belief-state/credibility system —
+      it needs a per-faction "line of sight" set that doesn't exist
+      anywhere in the current map/game model (the whole board is always
+      fully visible to every faction via `GET .../state`; there's no
+      fog-of-war over unit positions to pierce). That's a real,
+      separate architectural gap — see the new item below — not something
+      to fake to make this feature look more complete than it is.
+      Instead, reused the field that's actually meaningful today: `Order`
+      already had a dead `target_faction` field (see `API.md`'s old note —
+      "accepted, not read by the adjudicator" — for `SUPPORT`, still true
+      there). For `SPY`, `target_faction` is now real: it names which
+      faction to investigate. Rewrote `resolve_espionage_orders()` (it
+      previously took `target_destination` as a *territory* and compared a
+      message's `recipient` field — a faction name — against that
+      territory name, which could never match; a real bug in code that had
+      never run) to instead return, per resolved `SPY` order: every `MOVE`
+      order `target_faction` actually submitted that turn (real intel —
+      orders are otherwise hidden from everyone until the whole turn
+      resolves simultaneously) and the content of every private
+      (non-`PUBLIC`) message that turn involving `target_faction` where the
+      spying faction wasn't already a party (a DM to/from you directly is
+      already visible via `GET .../messages`).
+      Results are secret: added `GameSession.intel_reports` (persisted like
+      everything else via `to_state()`/`restore()`) and a new
+      `GET /api/v1/games/{game_id}/intel` endpoint, authenticated the same
+      way as messages/orders (`get_authorized_faction`), filtered to
+      `spying_faction == agent_faction` — confirmed via a second registered
+      agent seeing an empty list for its own game. `GET .../state` (fully
+      public, no auth) never includes intel content — only a redacted
+      public event (`"🕵️ Blue ran an espionage operation against Red."`)
+      naming the spy and target, not what was found, mirroring how treaty
+      breaches are logged publicly without leaking treaty details that
+      aren't the victim's own.
+      Updated `static/API.md` (new "Espionage Intel" section, `SPY` added
+      to the orders table, corrected the old `target_faction`-is-dead note
+      to carve out the `SPY` exception) and `static/RULES.md` (new
+      "Espionage" section, replacing the old "Not Yet Active" stub that
+      described this exact gap).
+      **Not done, and deliberately out of scope for this pass:**
+      - No frontend for it — `static/player.html`'s orders form only has
+        `HOLD`/`MOVE`/`SUPPORT` in its action dropdown, same as treaty
+        proposals having no UI there either (see "Frontend wiring" below).
+        A human can still do this today via a raw `curl`/HTTP call, same
+        as an agent would.
+      - `engine.py` (the standalone independent implementation) and
+        `agent.py`'s reference prompt schema (`"enum": ["HOLD", "MOVE",
+        "SUPPORT"]`) weren't touched — consistent with how the treaty
+        Perfidy Rule was only wired into `app/mcts.py`'s `Adjudicator`, not
+        propagated to the other two independent rule copies (see
+        "Consolidation" below).
+      - `app/archetypes.py` bots never issue `SPY` orders themselves — they
+        don't gain any benefit from this new mechanic, only human/real
+        agents interacting with the API directly do.
+- [ ] **`app/intel_matrix.py`'s belief-state/credibility system remains
+      fully unwired.** `IntelligenceVerificationMatrix.synthesize_belief_state()`
+      / `.audit_ground_truth()` both require a per-faction "line of sight"
+      set as input, and no such concept exists in the current game model —
+      the entire board is always visible to everyone via `GET .../state`.
+      Before this module could do anything, someone has to decide what
+      "line of sight" even means here (adjacency to your own units? a
+      fixed radius? something `SPY` orders extend?) and implement an actual
+      per-faction partial-visibility map — a real design decision and a
+      much bigger change than the `SPY` order mechanic above, which
+      deliberately didn't require it.
 
 ## Gameplay logic gaps
 

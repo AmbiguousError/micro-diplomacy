@@ -195,39 +195,56 @@ class TreatyAndEspionageEngine:
         self,
         current_turn: int,
         orders_by_faction: Dict[str, List[Dict[str, Any]]],
-        intercepted_dms: List[Dict[str, Any]]
+        turn_messages: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Resolves SPY commands, returning secret intel packets to spying players."""
+        """Resolves SPY commands, returning secret intel packets to spying players.
+
+        A SPY order (unit_territory=<spying unit>, action=SPY,
+        target_faction=<faction to investigate>) forfeits that unit's move
+        for the turn (it still defends its own territory - see
+        Adjudicator.adjudicate()'s HOLD/SUPPORT/SPY bucket) in exchange for
+        two things about target_faction, for this turn only:
+        - every MOVE order they actually submitted (their real troop
+          movements are otherwise never visible - orders are hidden from
+          everyone until the whole turn resolves).
+        - the content of every private (non-PUBLIC) DM this turn where
+          target_faction is the sender or recipient and the spying faction
+          wasn't already a party to it (those are already visible via the
+          normal GET .../messages endpoint).
+        """
         intel_packets = []
 
         for faction, orders in orders_by_faction.items():
             for order in orders:
-                if order.get("action") == "SPY":
-                    target = order.get("target_destination")
-                    spying_unit = order.get("unit_territory")
+                if order.get("action") != "SPY":
+                    continue
+                target = order.get("target_faction")
+                spying_unit = order.get("unit_territory")
+                if not target or target == faction:
+                    continue
 
-                    # Extract all movements heading into the spied territory
-                    incoming_moves = []
-                    for other_fac, other_orders in orders_by_faction.items():
-                        if other_fac == faction:
-                            continue
-                        for o in other_orders:
-                            if o.get("action") == "MOVE" and o.get("target_destination") == target:
-                                incoming_moves.append(f"{other_fac} moving from {o.get('unit_territory')}")
+                observed_movements = [
+                    f"{target} moved {o.get('unit_territory')} -> {o.get('target_destination')}"
+                    for o in orders_by_faction.get(target, [])
+                    if o.get("action") == "MOVE"
+                ]
 
-                    # Intercept relevant DMs
-                    leaked_msg = None
-                    for dm in intercepted_dms:
-                        if target in dm.get("content", "") or dm.get("recipient") == target:
-                            leaked_msg = f"{dm.get('sender')} -> {dm.get('recipient')}: '{dm.get('content')}'"
-                            break
+                intercepted = [
+                    f"{m['sender']} -> {m['recipient']}: '{m['content']}'"
+                    for m in turn_messages
+                    if m.get("turn") == current_turn
+                    and m.get("recipient") != "PUBLIC"
+                    and target in (m.get("sender"), m.get("recipient"))
+                    and faction not in (m.get("sender"), m.get("recipient"))
+                ]
 
-                    intel_packets.append({
-                        "spying_faction": faction,
-                        "source_territory": spying_unit,
-                        "target_territory": target,
-                        "observed_incoming_movements": incoming_moves,
-                        "intercepted_comms": leaked_msg or "No signals intercepted."
-                    })
+                intel_packets.append({
+                    "turn": current_turn,
+                    "spying_faction": faction,
+                    "source_territory": spying_unit,
+                    "target_faction": target,
+                    "observed_movements": observed_movements,
+                    "intercepted_messages": intercepted,
+                })
 
         return intel_packets

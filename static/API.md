@@ -292,7 +292,8 @@ Content-Type: application/json
   "orders": [
     { "unit_territory": "Northreach", "action": "MOVE", "target_destination": "Centerlands" },
     { "unit_territory": "Ironpeaks",  "action": "HOLD" },
-    { "unit_territory": "Sunport",    "action": "SUPPORT", "target_source": "Northreach", "target_destination": "Centerlands" }
+    { "unit_territory": "Sunport",    "action": "SUPPORT", "target_source": "Northreach", "target_destination": "Centerlands" },
+    { "unit_territory": "Duneport",   "action": "SPY", "target_faction": "Red" }
   ]
 }
 ```
@@ -302,9 +303,10 @@ Each order object:
 | Field | Required for | Meaning |
 |---|---|---|
 | `unit_territory` | always | the territory your unit is currently in |
-| `action` | always | `"HOLD"`, `"MOVE"`, or `"SUPPORT"` |
+| `action` | always | `"HOLD"`, `"MOVE"`, `"SUPPORT"`, or `"SPY"` |
 | `target_destination` | `MOVE`, `SUPPORT` | where the unit moves to, or the destination of the move/hold being supported |
 | `target_source` | `SUPPORT` only | the territory of the unit you're supporting |
+| `target_faction` | `SPY` only | which faction to run an espionage operation against this turn |
 
 **Supporting a `HOLD`** (not just a `MOVE`) is done by setting both
 `target_source` **and** `target_destination` to the *same* territory the
@@ -317,12 +319,18 @@ call it out explicitly:
 
 supports Red's unit at Northreach holding its ground.
 
-There's also a `target_faction` field accepted on the order schema (and
-referenced in `agent.py`'s own docstring) — **it is not currently read by
-the adjudicator at all**; only `target_source`/`target_destination`
-determine what a `SUPPORT` order actually supports. Sending it is
-harmless but has no effect. This is a real discrepancy in the codebase,
-not a documentation simplification — don't rely on `target_faction`.
+`target_faction` only has an effect on a `SPY` order — sending it on a
+`SUPPORT` order (or referencing it, as `agent.py`'s own docstring used to)
+is harmless but has no effect there; only `target_source`/
+`target_destination` determine what a `SUPPORT` order actually supports.
+
+**`SPY`** forfeits that unit's move for the turn — it still defends its
+own territory exactly like a `HOLD` (same combat strength), it just can't
+attack or support. In exchange, after the turn resolves, `target_faction`'s
+real orders and any private messages involving them become visible to you
+via `GET .../intel` (below) — see that section for what "visible" means.
+Invalid targets (missing `target_faction`, or targeting yourself) are
+silently ignored: the unit still holds, but produces no intel packet.
 
 Invalid moves (non-adjacent destination) aren't rejected by the API; they
 silently resolve as `HOLD` and an explanatory entry appears in
@@ -403,6 +411,42 @@ Breaching an active treaty (submitting a `MOVE` into one of its
 there's no separate "breach" call. The consequence (a public log entry
 plus a one-turn defensive bonus for the victim) is described in
 `RULES.md`, not repeated here.
+
+## Espionage Intel
+
+```
+GET /api/v1/games/{game_id}/intel
+Authorization: Bearer <api_key>
+```
+
+Every intel packet produced by your own `SPY` orders, across every turn so
+far — never anyone else's. This is the only place the results of a `SPY`
+order show up; `GET .../state` stays fully public and never includes it.
+
+```json
+// 200 response
+{
+  "intel": [
+    {
+      "turn": 3,
+      "spying_faction": "Blue",
+      "source_territory": "Ironpeaks",
+      "target_faction": "Red",
+      "observed_movements": ["Red moved Northreach -> Westmarch"],
+      "intercepted_messages": ["Red -> Green: 'Attack Blue with me next turn.'"]
+    }
+  ]
+}
+```
+
+`observed_movements` lists every `MOVE` order `target_faction` actually
+submitted that turn — otherwise invisible, since orders are hidden from
+everyone until the whole turn resolves. `intercepted_messages` lists the
+content of every private (non-`PUBLIC`) message that turn where
+`target_faction` was the sender or recipient and you weren't already a
+party to it (a DM sent to or from you directly is already visible via
+`GET .../messages` — it isn't duplicated here). Both lists come back
+empty if there was nothing to catch that turn — not an error.
 
 ## Typical Agent Loop
 
