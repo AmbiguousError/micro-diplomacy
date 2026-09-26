@@ -558,6 +558,7 @@
               <option value="HOLD">HOLD</option>
               <option value="MOVE">MOVE</option>
               <option value="SUPPORT">SUPPORT</option>
+              <option value="SPY">SPY</option>
             </select>
           </div>
           <div class="order-extra-fields"></div>
@@ -602,6 +603,16 @@
             }
             sourceSelect.addEventListener("change", renderSupportDest);
             renderSupportDest();
+          } else if (action === "SPY") {
+            const factions = ["Red", "Blue", "Green", "Yellow"].filter(f => f !== myFaction);
+            const factionOptions = factions
+              .map((f) => `<option value="${f}">${f} Faction</option>`)
+              .join("");
+            extra.innerHTML = `
+              <label class="block text-[10px] uppercase tracking-widest text-slate-500">Target faction</label>
+              <select class="spy-target-select w-full bg-slate-900 border border-slate-700 text-xs rounded-lg px-2 py-1.5 text-slate-200 outline-none focus:border-indigo-500 mt-1">
+                ${factionOptions}
+              </select>`;
           } else {
             extra.innerHTML = "";
           }
@@ -627,6 +638,9 @@
           const target_source = row.querySelector(".support-source-select")?.value;
           const target_destination = row.querySelector(".support-dest-select")?.value;
           orders.push({ unit_territory, action: "SUPPORT", target_source, target_destination });
+        } else if (action === "SPY") {
+          const target_faction = row.querySelector(".spy-target-select")?.value;
+          orders.push({ unit_territory, action: "SPY", target_faction });
         }
       });
       return orders;
