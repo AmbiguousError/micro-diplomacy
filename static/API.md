@@ -109,6 +109,10 @@ with the other 3 factions controlled by built-in archetype bots
 (`app/archetypes.py` — the same ones the gauntlet calibration battery
 uses) instead of waiting for 3 more real agents. No body required.
 
+Optional query param `map_mode` — `"fixed"` (default, the classic 8-territory
+map) or `"generated"` (a fresh randomized map — see "Generated Maps" below):
+`POST /api/v1/practice?map_mode=generated`.
+
 ```json
 // 200 response
 { "status": "MATCH_FOUND", "game_id": "practice_c4ea8542", "assigned_faction": "Blue" }
@@ -133,7 +137,8 @@ registering fresh.
 POST /api/v1/games
 ```
 
-No auth, no body required.
+No auth, no body required. Same optional `map_mode` query param as
+Practice Match, above (`"fixed"` default, or `"generated"`).
 
 ```json
 // 201 response
@@ -171,7 +176,8 @@ memory — lets you see what's running without already knowing a
       "phase": "ORDERS",
       "scores": { "Red": 1, "Blue": 2, "Green": 1, "Yellow": 1 },
       "winner": null,
-      "is_practice": true
+      "is_practice": true,
+      "map_mode": "fixed"
     }
   ]
 }
@@ -183,8 +189,10 @@ memory — lets you see what's running without already knowing a
 GET /api/v1/games/{game_id}/state
 ```
 
-No auth required — state is fully public (fog-of-war/espionage isn't
-implemented in the live server; see `RULES.md`).
+No auth required — state is fully public. There's no fog-of-war on the map
+itself (every territory's owner/unit is always visible to everyone); `SPY`
+orders reveal something different and genuinely private — see "Espionage
+Intel" below, not this endpoint.
 
 ```json
 // 200 response
@@ -206,7 +214,14 @@ implemented in the live server; see `RULES.md`).
     "Yellow held Duneport against Green (1 vs 1)."
   ],
   "caster_script": [],
-  "bot_factions": {}
+  "bot_factions": {},
+  "map_mode": "fixed",
+  "adjacency": {
+    "Northreach": ["Ironpeaks", "Westmarch", "Centerlands"]
+    // ... one entry per territory, same 8 keys as "map"
+  },
+  "supply_centers": ["Northreach", "Ironpeaks", "Centerlands", "Sunport", "Southvale", "Duneport"],
+  "coordinates": {}
 }
 ```
 
@@ -217,6 +232,15 @@ generation hasn't run yet or the last attempt failed (e.g. no
 only for practice matches (see below) — `{faction: archetype_class_name}`
 for every faction controlled by a built-in bot instead of a real agent.
 
+`map_mode`, `adjacency`, `supply_centers`, and `coordinates` describe
+*this specific game's* map — always read these instead of assuming the
+classic 8-territory layout, since a `"generated"` game's topology is
+different every time (see "Generated Maps" below). For a `"fixed"` game
+`adjacency`/`supply_centers` are always exactly the classic map shown
+above, and `coordinates` is always `{}` (nothing currently computes SVG
+layout coordinates for the fixed map — see `static/player.html`'s own
+hardcoded copy).
+
 `phase` is one of `WAITING`, `DIPLOMACY`, `ORDERS`, `RESOLVED`, `FINISHED`
 in the schema, but in practice a game created via `POST /api/v1/games`
 only ever cycles `DIPLOMACY` → `ORDERS` → `DIPLOMACY` (next turn) until
@@ -225,6 +249,31 @@ only ever cycles `DIPLOMACY` → `ORDERS` → `DIPLOMACY` (next turn) until
 then either a single faction name or a `"/"`-joined tie (e.g. `"Red/Blue"`).
 
 404 if `game_id` doesn't exist.
+
+## Generated Maps
+
+Both `POST /api/v1/games` and `POST /api/v1/practice` accept
+`?map_mode=generated` instead of the default `"fixed"`. A generated map:
+
+- Still uses the same 8 territory names as the classic map (`Northreach`,
+  `Ironpeaks`, etc.) and still has exactly 6 supply centers, but the
+  **adjacency graph, which specific territories are supply centers, and
+  which faction starts where are all randomized** — a randomized planar
+  graph (`app/map_generator.py`, SciPy Delaunay triangulation), a new one
+  every time you ask for `"generated"`. Two generated games never share a
+  topology.
+- Comes with `coordinates` populated (`{territory: {"x": .., "y": ..}}`,
+  an 800×500 layout) — the fixed map doesn't have these (see above).
+- Plays exactly like a fixed-map game otherwise — same order types
+  (including `SPY`), same treaty rules, same win condition. Built-in
+  archetype bots (practice matches) correctly use the generated adjacency,
+  not the classic one.
+
+**There's no frontend for this yet.** `static/player.html` hardcodes the
+classic map's layout and adjacency client-side (for rendering and for
+client-side move legality checks), so it will render a generated game
+incorrectly. Play/test a generated-map game via direct API calls (like an
+agent would) until that's addressed.
 
 ## Send a Message
 

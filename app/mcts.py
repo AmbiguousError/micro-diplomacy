@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -33,6 +34,49 @@ STARTING_POSITIONS: Dict[str, str] = {
 }
 
 WIN_SC_THRESHOLD = 5
+
+
+@dataclass
+class MapTopology:
+    """Bundles what used to be three separate module-level globals so a
+    GameSession/Adjudicator/SimState can use a per-instance map instead of
+    always closing over ADJACENCY/SUPPLY_CENTERS/STARTING_POSITIONS - see
+    build_generated_topology() below for the other way to construct one."""
+    territories: List[str]
+    adjacency: Dict[str, Set[str]]
+    supply_centers: Set[str]
+    starting_positions: Dict[str, str]
+    coordinates: Dict[str, Dict[str, float]] = field(default_factory=dict)
+
+
+CLASSIC_TOPOLOGY = MapTopology(
+    territories=list(ADJACENCY),
+    adjacency=ADJACENCY,
+    supply_centers=SUPPLY_CENTERS,
+    starting_positions=STARTING_POSITIONS,
+)
+
+
+def build_generated_topology() -> MapTopology:
+    """Wraps app/map_generator.py's MapGenerator (previously unwired dead
+    code - see TODO.md) into a usable MapTopology. Two adaptations needed:
+    generate_topology() returns adjacency as lists, not sets, and it has no
+    concept of per-faction starting positions at all - both fixed up here
+    rather than in map_generator.py itself."""
+    from .map_generator import MapGenerator
+
+    raw = MapGenerator().generate_topology()
+    adjacency = {terr: set(neighbors) for terr, neighbors in raw["adjacency"].items()}
+    supply_centers = set(raw["supply_centers"])
+    home_scs = random.sample(sorted(supply_centers), len(FACTIONS))
+    starting_positions = dict(zip(FACTIONS, home_scs))
+    return MapTopology(
+        territories=list(adjacency),
+        adjacency=adjacency,
+        supply_centers=supply_centers,
+        starting_positions=starting_positions,
+        coordinates=raw["coordinates"],
+    )
 
 # =====================================================================
 # 2. DATA MODELS
@@ -80,6 +124,17 @@ class GameState(BaseModel):
     # built-in bot rather than a real registered agent. Exposed publicly
     # so clients can be honest about which opponents are simulated.
     bot_factions: Dict[str, str] = {}
+    # "fixed" (the classic 8-territory map, the default and only mode
+    # before this field existed) or "generated" (see
+    # build_generated_topology() below). adjacency/supply_centers/
+    # coordinates describe *this game's own* map - for "fixed" games
+    # they're always exactly ADJACENCY/SUPPLY_CENTERS/{} above, but every
+    # client should read them from here rather than assuming the classic
+    # map, since a "generated" game's topology varies every time.
+    map_mode: str = "fixed"
+    adjacency: Dict[str, List[str]] = {}
+    supply_centers: List[str] = []
+    coordinates: Dict[str, Dict[str, float]] = {}
 
 # =====================================================================
 # 3. ADJUDICATION ALGORITHM
@@ -91,6 +146,7 @@ class Adjudicator:
         current_map: Dict[str, TerritoryState],
         submitted_orders: Dict[str, List[Order]],
         defensive_buffs: Optional[Dict[str, Dict[str, int]]] = None,
+        topology: MapTopology = CLASSIC_TOPOLOGY,
     ) -> Tuple[Dict[str, TerritoryState], List[str]]:
         """
         defensive_buffs: faction -> territory -> bonus strength, from
@@ -98,8 +154,15 @@ class Adjudicator:
         Rule" +1 defensive bonus after a treaty breach - see
         PROJECT_HANDOFF.md). Applies only to a defending HOLD/SUPPORT-hold
         at that territory, never to an attacking MOVE.
+
+        topology: which map this game is actually playing on (see
+        MapTopology/CLASSIC_TOPOLOGY/build_generated_topology() above) -
+        defaults to the classic fixed map so every existing caller keeps
+        working unchanged.
         """
         defensive_buffs = defensive_buffs or {}
+        adjacency = topology.adjacency
+        supply_centers = topology.supply_centers
         events: List[str] = []
         new_map: Dict[str, TerritoryState] = {
             t: TerritoryState(sc_owner=state.sc_owner, unit_faction=None)
@@ -137,13 +200,13 @@ class Adjudicator:
                 if not is_cut:
                     uncut_supports.add(terr)
 
-        incoming_attacks: Dict[str, List[Tuple[str, str, int]]] = {t: [] for t in ADJACENCY}
+        incoming_attacks: Dict[str, List[Tuple[str, str, int]]] = {t: [] for t in adjacency}
         holds: Dict[str, Tuple[str, int]] = {}
 
         for terr, (faction, order) in active_orders.items():
             if order.action == ActionType.MOVE:
                 dest = order.target_destination
-                if dest in ADJACENCY.get(terr, set()):
+                if dest in adjacency.get(terr, set()):
                     support_bonus = sum(
                         1 for s_terr in uncut_supports
                         if active_orders[s_terr][1].target_source == terr
@@ -180,7 +243,7 @@ class Adjudicator:
         dest_occupant: Dict[str, str] = {}
         origin_bounce_back: Dict[str, str] = {}
 
-        for dest in ADJACENCY:
+        for dest in adjacency:
             attacks = incoming_attacks[dest]
             has_holder = dest in holds
 
@@ -242,7 +305,7 @@ class Adjudicator:
 
         for terr, faction in surviving_units.items():
             new_map[terr].unit_faction = faction
-            if terr in SUPPLY_CENTERS:
+            if terr in supply_centers:
                 new_map[terr].sc_owner = faction
 
         return new_map, events
@@ -261,6 +324,7 @@ class SimState:
     turn: int
     map_units: Dict[str, str] = field(default_factory=dict)  # territory -> controlling faction
     map_sc: Dict[str, str] = field(default_factory=dict)     # territory -> SC owner faction or "Neutral"
+    topology: MapTopology = field(default_factory=lambda: CLASSIC_TOPOLOGY)
 
     def get_scores(self) -> Dict[str, int]:
         scores = {f: 0 for f in FACTIONS}
@@ -281,14 +345,19 @@ class SimState:
         return False, None
 
     @classmethod
-    def from_territory_map(cls, territory_map: Dict[str, "TerritoryState"], turn: int) -> "SimState":
+    def from_territory_map(
+        cls,
+        territory_map: Dict[str, "TerritoryState"],
+        turn: int,
+        topology: MapTopology = CLASSIC_TOPOLOGY,
+    ) -> "SimState":
         """The inverse of FastAdjudicator.step()'s internal conversion - lets
         code holding a full GameSession's map (app/main.py) query an
         archetype bot (app/archetypes.py), which only knows how to read a
         SimState, without needing its own copy of this conversion."""
         map_units = {t: ts.unit_faction for t, ts in territory_map.items() if ts.unit_faction}
-        map_sc = {t: (ts.sc_owner or "Neutral") for t, ts in territory_map.items() if t in SUPPLY_CENTERS}
-        return cls(turn=turn, map_units=map_units, map_sc=map_sc)
+        map_sc = {t: (ts.sc_owner or "Neutral") for t, ts in territory_map.items() if t in topology.supply_centers}
+        return cls(turn=turn, map_units=map_units, map_sc=map_sc, topology=topology)
 
 
 class FastAdjudicator:
@@ -300,19 +369,22 @@ class FastAdjudicator:
         joint_orders: Dict[str, Tuple[Order, ...]],
         defensive_buffs: Optional[Dict[str, Dict[str, int]]] = None,
     ) -> SimState:
+        topology = state.topology
         current_map: Dict[str, TerritoryState] = {}
-        for terr in ADJACENCY:
+        for terr in topology.adjacency:
             unit = state.map_units.get(terr)
-            sc_owner = state.map_sc.get(terr) if terr in SUPPLY_CENTERS else None
+            sc_owner = state.map_sc.get(terr) if terr in topology.supply_centers else None
             current_map[terr] = TerritoryState(
                 sc_owner=None if sc_owner in (None, "Neutral") else sc_owner,
                 unit_faction=None if unit in (None, "Neutral") else unit,
             )
 
         submitted_orders = {faction: list(orders) for faction, orders in joint_orders.items()}
-        new_map, _events = Adjudicator.adjudicate(current_map, submitted_orders, defensive_buffs=defensive_buffs)
+        new_map, _events = Adjudicator.adjudicate(
+            current_map, submitted_orders, defensive_buffs=defensive_buffs, topology=topology
+        )
 
         new_map_units = {terr: ts.unit_faction for terr, ts in new_map.items() if ts.unit_faction}
-        new_map_sc = {terr: (ts.sc_owner or "Neutral") for terr, ts in new_map.items() if terr in SUPPLY_CENTERS}
+        new_map_sc = {terr: (ts.sc_owner or "Neutral") for terr, ts in new_map.items() if terr in topology.supply_centers}
 
-        return SimState(turn=state.turn + 1, map_units=new_map_units, map_sc=new_map_sc)
+        return SimState(turn=state.turn + 1, map_units=new_map_units, map_sc=new_map_sc, topology=topology)

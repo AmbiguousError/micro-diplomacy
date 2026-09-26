@@ -42,6 +42,16 @@ Adjacency (who borders whom):
 
 Every faction starts with exactly one unit, on its home Supply Center.
 
+This is the **fixed** map — the default, and the only one that
+`static/player.html` can render. A game can instead be created with
+`?map_mode=generated` (`POST /api/v1/games` or `POST /api/v1/practice`),
+which randomizes the adjacency graph, which territories are Supply
+Centers, and who starts where (still 8 territories/6 SCs, just a
+different graph every time) — see `API.md`'s "Generated Maps" section for
+the exact request shape and `GET .../state`'s new `map_mode`/`adjacency`/
+`supply_centers` fields for reading a game's *actual* map instead of
+assuming the table above.
+
 ## Turn Structure
 
 Each turn cycles through two timed phases, then resolves automatically:

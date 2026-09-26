@@ -360,13 +360,61 @@ more than adding an import:
       `caster_script` — they remain the static demos described in the item
       above this one. Wiring the display side is a natural next step but a
       separate, smaller piece of work.
-- [ ] **`app/map_generator.py`.** `MapGenerator.generate_topology()` produces
-      a randomized Delaunay planar graph, but `ADJACENCY`, `SUPPLY_CENTERS`,
-      and `STARTING_POSITIONS` in `app/mcts.py` are hardcoded module-level
-      constants that `Adjudicator` and `GameSession` both close over directly.
-      Using generated maps requires refactoring those from module constants
-      to per-`GameSession` instance state first — a real (if small)
-      architectural change, not just calling the generator.
+- [x] **Wire `app/map_generator.py` into live games.** *(Done — verified
+      with a local live server: a fixed-map practice match's
+      `GET .../state` exactly matches the classic `ADJACENCY`/
+      `SUPPLY_CENTERS` constants; a generated-map practice match has 8
+      territories, 6 SCs, 4 distinct factions on distinct SC starting
+      territories, and a real turn resolves correctly using the generated
+      (not classic) adjacency — confirmed via a bot move that's only legal
+      under the generated graph; a generated game's topology round-trips
+      correctly through a full process restart (same method used to
+      originally verify the SQLite persistence layer). Full pytest suite
+      still 5/5, unchanged.)*
+      Did the actual refactor this item called for: `ADJACENCY`,
+      `SUPPLY_CENTERS`, `STARTING_POSITIONS` stay exactly as they were
+      (nothing that reads them directly needed to change), but
+      `Adjudicator.adjudicate()`, `SimState`, `FastAdjudicator.step()`, and
+      `GameSession` now all take a `MapTopology` (`app/mcts.py`) — bundles
+      adjacency/supply_centers/starting_positions/coordinates — as a
+      parameter/instance attribute defaulting to `CLASSIC_TOPOLOGY` (built
+      from the unchanged globals), so every existing call site keeps
+      working with zero changes. `app/archetypes.py`'s three bot classes
+      switched from importing `ADJACENCY`/`SUPPLY_CENTERS` directly to
+      reading `state.topology.adjacency`/`state.topology.supply_centers`,
+      so practice-match bots actually play correctly on a generated map
+      instead of silently using the wrong graph.
+      New `build_generated_topology()` (`app/mcts.py`) wraps
+      `MapGenerator.generate_topology()`, fixing two real gaps found in
+      it: its `adjacency` values are `list`s (everywhere else expects
+      `Set[str]`), and it produces no starting-position assignment at all
+      — `build_generated_topology()` picks 4 of its `supply_centers` for
+      `FACTIONS` (the rest stay neutral, same as the classic map's
+      Centerlands/Southvale).
+      `POST /api/v1/games` and `POST /api/v1/practice` both gained an
+      optional `?map_mode=fixed|generated` query param (default `fixed` —
+      no existing caller's behavior changes). `GameState` gained
+      `map_mode`/`adjacency`/`supply_centers`/`coordinates` fields so a
+      client can read a game's *actual* map instead of assuming the
+      classic one; `GameSession.to_state()`/`restore()` persist the
+      per-game topology, defaulting to `CLASSIC_TOPOLOGY` when the key is
+      absent so already-persisted production games (saved before this
+      change) keep restoring correctly.
+      Updated `static/API.md` (new "Generated Maps" section, `map_mode` on
+      the two create endpoints, the new `GameState` fields, and fixed a
+      stale claim that "fog-of-war/espionage isn't implemented" left over
+      from before the `SPY` work) and `static/RULES.md` (a short note under
+      "The Map" pointing at the new query param and fields).
+      **Deliberately out of scope, per the plan**: `static/player.html`
+      (hardcodes the classic map's topology, layout coordinates, and
+      client-side move-legality checks as static JS — would need real
+      frontend work to render a generated map, not just a flag; it keeps
+      working exactly as before for fixed-map games since that's still the
+      default). `engine.py` (dead, unimported duplicate),
+      `app/gauntlet_runner.py` (its own isolated, hardcoded calibration
+      battery), and `agent.py`'s prompt-text map description — none of
+      these were touched, consistent with how other features this session
+      left the "three independent implementations" gap alone.
 - [x] **Wire up `SPY` orders as a real espionage mechanic.** *(Done —
       verified both with a live practice match over real HTTP (register →
       practice match → submit a `SPY` order → wait for resolution → read
@@ -721,12 +769,18 @@ more than adding an import:
       (wired up to actually register/queue/play, see below) needs
       `ADJACENCY` client-side to validate `MOVE`/`SUPPORT` destination
       dropdowns, and duplicates it inline rather than fetching it from the
-      server — flagged in a comment in that file pointing back here. If the
-      map topology ever changes (e.g. `app/map_generator.py` gets wired in),
-      this is one more place that will silently drift out of sync unless a
-      real "get the current map's topology" endpoint gets built and all four
-      copies (`app/mcts.py`, `engine.py`, `agent.py`, `static/player.html`)
-      are pointed at it instead.
+      server — flagged in a comment in that file pointing back here.
+      `app/map_generator.py` **has** since been wired in (see "Gameplay
+      logic gaps" above) and there **is** now a real "get the current map's
+      topology" endpoint — `GET .../state`'s `adjacency`/`supply_centers`/
+      `coordinates` fields, correct for both fixed and generated games —
+      but `player.html` wasn't pointed at it (out of scope for that change,
+      by design). It still hardcodes the classic map inline, so it works
+      fine for fixed-map games (still the default) but will mis-render or
+      wrongly reject legal moves on a generated one. Fixing this for real
+      means `player.html` fetching `adjacency`/`coordinates` from
+      `GET .../state` instead of its own constants — worth doing before
+      generated maps are exposed to human players, not just agents.
 - [ ] **Decide the canonical rating system.** `app/trueskill_engine.py` (used
       by `app/gauntlet_runner.py`) and `app/elo_calibrator.py` (standalone,
       only exercised by its own `if __name__ == "__main__"` demo) are two

@@ -7,11 +7,18 @@ anything.
 
 ## Repo state right now
 
-- Git repo (`main` branch), 9 commits, **working tree clean, everything
-  committed and pushed** to `https://github.com/AmbiguousError/micro-diplomacy.git`.
-  (Earlier in the project's life there was substantial uncommitted work in
-  the tree at handover time — that's no longer the case; `git status` really
-  does reflect reality now.)
+- Git repo (`main` branch), **working tree clean, everything committed and
+  pushed** to `https://github.com/AmbiguousError/micro-diplomacy.git` —
+  check `git log --oneline` for the current commit count/history rather
+  than trusting a specific number here, it goes stale immediately.
+  **This repo must stay public** for the Mac Mini's deploy loop below to
+  work — it once went private mid-session (cause unknown; not something
+  this session did deliberately) and `git pull` on the Mac Mini started
+  failing with a `401` until it was set back to public
+  (`gh repo edit ... --visibility public`). If a deploy ever fails with
+  `"could not read Username for 'https://github.com'"`, check
+  `gh repo view --json visibility` first before assuming it's a network or
+  server problem.
 - `venv/` exists with everything installed (`requirements.txt` +
   `requirements-dev.txt`). `pytest` (bare, no `python -m`) is 5/5.
 - Runs locally via `uvicorn app.main:app --reload --port 8000`, or via
@@ -70,6 +77,20 @@ anything.
   the gaps list). `app/intel_matrix.py`'s separate belief-state/credibility
   system is still unwired — see gap #1 below, it needs a real fog-of-war
   concept that doesn't exist yet.
+- **Generated maps are wired.** `?map_mode=generated` on `POST /api/v1/games`
+  or `POST /api/v1/practice` (default stays `"fixed"`, so nothing existing
+  changed behavior) spins up a game on a randomized planar graph
+  (`app/map_generator.py`, SciPy Delaunay) instead of the classic map —
+  same 8 territory names/6 SC count, but different adjacency, different SC
+  placement, different starting positions every time. `GameSession`,
+  `Adjudicator`, `SimState`, and the archetype bots all take a
+  `MapTopology` (`app/mcts.py`) now instead of closing over
+  `ADJACENCY`/`SUPPLY_CENTERS`/`STARTING_POSITIONS` as globals — those
+  globals still exist unchanged and are still what every *fixed*-map game
+  uses by default. `GET .../state` exposes a game's real
+  `map_mode`/`adjacency`/`supply_centers`/`coordinates`. **No frontend for
+  it** — `player.html` still hardcodes the classic map client-side (see
+  gap #2 below), so it only renders/works correctly for fixed-map games.
 - **DIPLOMACY phase is 30s**, matching the ORDERS phase (both were
   previously 120s/30s respectively; DIPLOMACY was cut for pacing, not a
   bug fix). Consistent across `app/main.py`, `RULES.md`, `API.md`, and
@@ -99,16 +120,21 @@ anything.
    is always fully visible to everyone via `GET .../state`. Someone has to
    decide what "line of sight" even means here before this module can be
    wired in; it's a real design decision, not a small fix.
-2. **Three independent copies of the game rules** (`app/mcts.py`,
+2. **`player.html` can't render or play a generated map.** It hardcodes the
+   classic map's adjacency and SVG layout coordinates client-side (for
+   both rendering and client-side move-legality checks), so a
+   `map_mode=generated` game will mis-render/wrongly reject legal moves
+   there — works fine via direct API calls (agents, `curl`), just not
+   through the human UI yet. Fix is to fetch `adjacency`/`coordinates`
+   from `GET .../state` instead of the hardcoded constants.
+3. **Three independent copies of the game rules** (`app/mcts.py`,
    root `engine.py`, `agent.py`'s prompt text) — no canonical choice made,
    no consolidation. If you change map topology, order semantics, or
    adjudication rules, you have to decide which of these you're targeting.
-   (The espionage work above only touched `app/mcts.py` — `engine.py` and
-   `agent.py`'s prompt schema don't know about `SPY` at all.)
-3. **Two independent rating systems** (`trueskill_engine.py`,
+   (Neither the espionage nor the generated-map work touched `engine.py` or
+   `agent.py`'s prompt schema — both are still classic-map/no-`SPY` only.)
+4. **Two independent rating systems** (`trueskill_engine.py`,
    `elo_calibrator.py`) — same story, undecided.
-4. `app/map_generator.py` unwired (needs `ADJACENCY` etc. moved off
-   module-level constants first — a real refactor, not a small one).
 5. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
    `scripts/`/root layout; Piper voice models were never fetched
    (`voices/` is empty); `static/docs.html)` has a stray trailing `)` in the

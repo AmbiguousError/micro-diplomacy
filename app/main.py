@@ -4,7 +4,7 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -13,7 +13,18 @@ from .archetypes import MachiavellianTraitor, OpportunisticGreedy, PacifistTurtl
 from .db import init_db, load_all_game_states, save_game_state
 from .dual_caster import DualShoutcasterService
 from .gauntlet_router import router as gauntlet_router
-from .mcts import Adjudicator, FACTIONS, Order, Phase, STARTING_POSITIONS, SUPPLY_CENTERS, TerritoryState, GameState, ADJACENCY, SimState
+from .mcts import (
+    Adjudicator,
+    CLASSIC_TOPOLOGY,
+    FACTIONS,
+    GameState,
+    MapTopology,
+    Order,
+    Phase,
+    SimState,
+    TerritoryState,
+    build_generated_topology,
+)
 from .treaties_engine import TreatyAndEspionageEngine, TreatyType
 
 ARCHETYPE_CLASSES = {
@@ -46,8 +57,10 @@ class TreatyProposal(BaseModel):
     duration_turns: int = 5
 
 class GameSession:
-    def __init__(self, game_id: str):
+    def __init__(self, game_id: str, topology: MapTopology = CLASSIC_TOPOLOGY, map_mode: str = "fixed"):
         self.game_id = game_id
+        self.topology = topology
+        self.map_mode = map_mode
         self.turn = 1
         self.phase = Phase.DIPLOMACY
         self.time_remaining = 30
@@ -68,16 +81,16 @@ class GameSession:
         self.intel_reports: List[Dict[str, Any]] = []
 
         self.map: Dict[str, TerritoryState] = {
-            t: TerritoryState(sc_owner=None, unit_faction=None) for t in ADJACENCY
+            t: TerritoryState(sc_owner=None, unit_faction=None) for t in topology.territories
         }
-        for faction, start_terr in STARTING_POSITIONS.items():
+        for faction, start_terr in topology.starting_positions.items():
             self.map[start_terr].unit_faction = faction
             self.map[start_terr].sc_owner = faction
 
     def calculate_scores(self) -> Dict[str, int]:
         scores = {f: 0 for f in FACTIONS}
         for terr, state in self.map.items():
-            if terr in SUPPLY_CENTERS and state.sc_owner in scores:
+            if terr in self.topology.supply_centers and state.sc_owner in scores:
                 scores[state.sc_owner] += 1
         return scores
 
@@ -86,7 +99,7 @@ class GameSession:
         for the current turn. Called once per turn, at DIPLOMACY start."""
         if not self.bot_factions:
             return
-        sim_state = SimState.from_territory_map(self.map, self.turn)
+        sim_state = SimState.from_territory_map(self.map, self.turn, topology=self.topology)
         for faction, archetype_name in self.bot_factions.items():
             bot = ARCHETYPE_CLASSES[archetype_name](faction)
             for msg in bot.generate_messages(self.turn, sim_state):
@@ -106,7 +119,7 @@ class GameSession:
         at ORDERS start."""
         if not self.bot_factions:
             return
-        sim_state = SimState.from_territory_map(self.map, self.turn)
+        sim_state = SimState.from_territory_map(self.map, self.turn, topology=self.topology)
         for faction, archetype_name in self.bot_factions.items():
             bot = ARCHETYPE_CLASSES[archetype_name](faction)
             self.orders[faction] = bot.generate_orders(self.turn, sim_state)
@@ -132,7 +145,7 @@ class GameSession:
         ]
 
         new_map, events = Adjudicator.adjudicate(
-            self.map, self.orders, defensive_buffs=self.treaty_engine.defensive_buffs
+            self.map, self.orders, defensive_buffs=self.treaty_engine.defensive_buffs, topology=self.topology
         )
         self.map = new_map
         self.recent_events = [b["message"] for b in breach_events] + espionage_events + events
@@ -157,9 +170,30 @@ class GameSession:
         self.time_remaining = 30
         self.run_bot_diplomacy()
 
+    def _topology_to_dict(self) -> Dict[str, Any]:
+        return {
+            "territories": self.topology.territories,
+            "adjacency": {t: sorted(n) for t, n in self.topology.adjacency.items()},
+            "supply_centers": sorted(self.topology.supply_centers),
+            "starting_positions": self.topology.starting_positions,
+            "coordinates": self.topology.coordinates,
+        }
+
+    @staticmethod
+    def _topology_from_dict(data: Dict[str, Any]) -> MapTopology:
+        return MapTopology(
+            territories=data["territories"],
+            adjacency={t: set(n) for t, n in data["adjacency"].items()},
+            supply_centers=set(data["supply_centers"]),
+            starting_positions=data["starting_positions"],
+            coordinates=data.get("coordinates", {}),
+        )
+
     def to_state(self) -> Dict[str, Any]:
         """Serializes this session to a JSON-safe dict for persistence."""
         return {
+            "map_mode": self.map_mode,
+            "topology": self._topology_to_dict(),
             "turn": self.turn,
             "phase": self.phase.value,
             "time_remaining": self.time_remaining,
@@ -176,6 +210,10 @@ class GameSession:
 
     def restore(self, state: Dict[str, Any]) -> None:
         """Overwrites this session's state from a dict produced by to_state()."""
+        self.map_mode = state.get("map_mode", "fixed")
+        self.topology = (
+            self._topology_from_dict(state["topology"]) if "topology" in state else CLASSIC_TOPOLOGY
+        )
         self.turn = state["turn"]
         self.phase = Phase(state["phase"])
         self.time_remaining = state["time_remaining"]
@@ -229,10 +267,12 @@ async def game_loop(game_id: str):
                 await update_caster_script(game)
             await save_game_state(game_id, game.to_state())
 
-async def spawn_game(game_id: str) -> GameSession:
+async def spawn_game(
+    game_id: str, topology: MapTopology = CLASSIC_TOPOLOGY, map_mode: str = "fixed"
+) -> GameSession:
     """Creates and persists a new GameSession, and starts its game_loop task.
     Shared by the direct create-game endpoint and the matchmaker callback."""
-    game = GameSession(game_id)
+    game = GameSession(game_id, topology=topology, map_mode=map_mode)
     games[game_id] = game
     await save_game_state(game_id, game.to_state())
     asyncio.create_task(game_loop(game_id))
@@ -267,9 +307,10 @@ def get_authorized_faction(game_id: str, agent: server_hub.AgentRecord = Depends
     return match["faction"]
 
 @app.post("/api/v1/games", status_code=201)
-async def create_game():
+async def create_game(map_mode: Literal["fixed", "generated"] = "fixed"):
     game_id = f"game_{len(games) + 1001}"
-    await spawn_game(game_id)
+    topology = build_generated_topology() if map_mode == "generated" else CLASSIC_TOPOLOGY
+    await spawn_game(game_id, topology=topology, map_mode=map_mode)
     return {"game_id": game_id, "status": "CREATED"}
 
 @app.get("/api/v1/games")
@@ -286,13 +327,17 @@ def list_games():
                 "scores": g.calculate_scores(),
                 "winner": g.winner,
                 "is_practice": bool(g.bot_factions),
+                "map_mode": g.map_mode,
             }
             for g in games.values()
         ]
     }
 
 @app.post("/api/v1/practice")
-async def start_practice_match(agent: server_hub.AgentRecord = Depends(server_hub.authenticate_agent)):
+async def start_practice_match(
+    map_mode: Literal["fixed", "generated"] = "fixed",
+    agent: server_hub.AgentRecord = Depends(server_hub.authenticate_agent),
+):
     """
     Starts a real GameSession immediately, filling the other 3 factions
     with built-in archetype bots (app/archetypes.py) instead of waiting
@@ -318,7 +363,8 @@ async def start_practice_match(agent: server_hub.AgentRecord = Depends(server_hu
     human_faction = factions_shuffled[0]
     bot_faction_names = factions_shuffled[1:]
 
-    game = await spawn_game(game_id)
+    topology = build_generated_topology() if map_mode == "generated" else CLASSIC_TOPOLOGY
+    game = await spawn_game(game_id, topology=topology, map_mode=map_mode)
     game.bot_factions = {f: random.choice(list(ARCHETYPE_CLASSES.keys())) for f in bot_faction_names}
     game.run_bot_diplomacy()
     await save_game_state(game_id, game.to_state())
@@ -346,6 +392,10 @@ def get_state(game_id: str):
         recent_events=game.recent_events,
         caster_script=game.caster_script,
         bot_factions=game.bot_factions,
+        map_mode=game.map_mode,
+        adjacency={t: sorted(n) for t, n in game.topology.adjacency.items()},
+        supply_centers=sorted(game.topology.supply_centers),
+        coordinates=game.topology.coordinates,
     )
 
 @app.post("/api/v1/games/{game_id}/messages", status_code=201)
@@ -423,7 +473,7 @@ async def propose_treaty(game_id: str, proposal: TreatyProposal, agent_faction: 
         treaty_type = TreatyType(proposal.treaty_type)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"treaty_type must be one of {[t.value for t in TreatyType]}")
-    invalid_terrs = [t for t in proposal.target_territories if t not in ADJACENCY]
+    invalid_terrs = [t for t in proposal.target_territories if t not in game.topology.adjacency]
     if invalid_terrs:
         raise HTTPException(status_code=422, detail=f"Unknown territories: {invalid_terrs}")
     if proposal.duration_turns < 1:

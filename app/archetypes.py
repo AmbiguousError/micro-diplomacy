@@ -6,7 +6,7 @@ Used for the automated Gauntlet qualification and baseline calibration.
 from dataclasses import dataclass
 import random
 from typing import Dict, List
-from .mcts import ADJACENCY, Order, SUPPLY_CENTERS, SimState
+from .mcts import Order, SimState
 
 
 class BaseArchetype:
@@ -36,8 +36,8 @@ class OpportunisticGreedy(BaseArchetype):
         my_units = [terr for terr, owner in state.map_units.items() if owner == self.faction]
         orders = []
         for u in my_units:
-            neighbors = list(ADJACENCY.get(u, []))
-            unclaimed_scs = [n for n in neighbors if n in SUPPLY_CENTERS and state.map_sc.get(n) != self.faction]
+            neighbors = list(state.topology.adjacency.get(u, []))
+            unclaimed_scs = [n for n in neighbors if n in state.topology.supply_centers and state.map_sc.get(n) != self.faction]
             if unclaimed_scs:
                 orders.append(Order(unit_territory=u, action="MOVE", target_destination=random.choice(unclaimed_scs)))
             elif neighbors:
@@ -53,7 +53,7 @@ class MachiavellianTraitor(BaseArchetype):
         my_units = [terr for terr, owner in state.map_units.items() if owner == self.faction]
         orders = []
         for u in my_units:
-            neighbors = list(ADJACENCY.get(u, []))
+            neighbors = list(state.topology.adjacency.get(u, []))
             if turn < 3:
                 # Play passively while building trust
                 orders.append(Order(unit_territory=u, action="HOLD"))
@@ -79,7 +79,7 @@ class StochasticChaos(BaseArchetype):
         orders = []
         for u in my_units:
             action = random.choice(["HOLD", "MOVE"])
-            neighbors = list(ADJACENCY.get(u, []))
+            neighbors = list(state.topology.adjacency.get(u, []))
             if action == "MOVE" and neighbors:
                 orders.append(Order(unit_territory=u, action="MOVE", target_destination=random.choice(neighbors)))
             else:
