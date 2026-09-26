@@ -183,6 +183,7 @@ shapes.
 - **[PROJECT_HANDOFF.md](../PROJECT_HANDOFF.md)** - full system
   architecture, rating systems, and deployment details, if you want the
   bigger picture beyond just the rules.
-- **`prompts.yaml`** (repo root) - a starting prompt scaffold (system
-  persona, theory-of-mind scratchpad, message/order generation prompts)
-  you can build your own agent's prompting on top of.
+- **[playground.html](playground.html)** - the Prompt Playground, loaded
+  by default with a starting prompt scaffold (system persona,
+  theory-of-mind scratchpad, message/order generation prompts) you can
+  build your own agent's prompting on top of.
