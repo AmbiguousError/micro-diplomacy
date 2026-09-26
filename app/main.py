@@ -10,7 +10,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from . import server_hub
 from .archetypes import MachiavellianTraitor, OpportunisticGreedy, PacifistTurtle, StochasticChaos
-from .db import init_db, load_all_game_states, save_game_state
+from .db import (
+    init_db,
+    load_all_agent_states,
+    load_all_assigned_matches,
+    load_all_game_states,
+    save_agent_state,
+    save_assigned_match,
+    save_game_state,
+)
 from .dual_caster import DualShoutcasterService
 from .gauntlet_router import router as gauntlet_router
 from .mcts import (
@@ -26,6 +34,7 @@ from .mcts import (
     build_generated_topology,
 )
 from .treaties_engine import TreatyAndEspionageEngine, TreatyType
+from .trueskill_engine import BayesianMMREngine, MatchResultSnapshot, TrueSkillProfile
 
 ARCHETYPE_CLASSES = {
     "PacifistTurtle": PacifistTurtle,
@@ -253,6 +262,89 @@ async def update_caster_script(game: GameSession) -> None:
         print(f"[dual_caster] commentary generation failed: {e}")
         game.caster_script = []
 
+mmr_engine = BayesianMMREngine()
+
+async def rate_finished_game(game: GameSession) -> None:
+    """Updates and persists real agents' TrueSkill ratings when a genuine
+    4-real-agent match finishes. Practice matches (bot_factions non-empty)
+    are never rated - archetype bots have no AgentRecord, and this
+    mirrors how app/gauntlet_runner.py's own bot-vs-candidate calibration
+    battles already never touch agents_db (fresh, throwaway registry per
+    call - bot opponents were never meant to affect the real leaderboard).
+    """
+    if game.bot_factions:
+        return
+
+    faction_to_agent = {
+        m["faction"]: agent_id
+        for agent_id, m in server_hub.assigned_matches.items()
+        if m["game_id"] == game.game_id
+    }
+    if len(faction_to_agent) != 4:
+        # Covers e.g. a game created directly via POST /api/v1/games
+        # (admin/testing - no agents ever matched into it) reaching
+        # FINISHED with nobody to rate. Skip rather than guess.
+        return
+
+    scores = game.calculate_scores()
+    # Same convention app/gauntlet_runner.py already uses: a strict
+    # placement_rank 1..4 from stable sort, even when SC counts tie.
+    # BayesianMMREngine has no representation for a tied placement (its
+    # adjacent-pairwise algorithm always treats index i as strictly
+    # beating index i+1) - a real, pre-existing limitation of the shared
+    # engine, not something this hook works around. A tie in
+    # game.winner (e.g. "Red/Blue") is fully honored below for `wins`/
+    # win-rate, but NOT reflected as a tie in the mu/sigma adjustment
+    # itself - the tied factions still get distinct (arbitrary-among-
+    # equals) placements for rating purposes.
+    ranked = sorted(FACTIONS, key=lambda f: scores.get(f, 0), reverse=True)
+    winners = set((game.winner or "").split("/"))
+
+    registry: Dict[str, TrueSkillProfile] = {}
+    records: Dict[str, server_hub.AgentRecord] = {}
+    for faction in FACTIONS:
+        agent_id = faction_to_agent[faction]
+        api_key = server_hub.agent_id_lookup[agent_id]
+        record = server_hub.agents_db[api_key]
+        records[faction] = record
+        registry[agent_id] = TrueSkillProfile(
+            agent_id=agent_id,
+            mu=record.mu,
+            sigma=record.sigma,
+            matches_played=record.matches_played,
+            conservative_mmr=record.conservative_mmr,
+        )
+
+    snapshots = [
+        MatchResultSnapshot(
+            agent_id=faction_to_agent[faction],
+            placement_rank=ranked.index(faction) + 1,
+            final_sc=scores.get(faction, 0),
+            # No real per-match persuasion/betrayal/deception scoring is
+            # derived from live gameplay yet (see TODO.md) - neutral
+            # constants collapse BayesianMMREngine's bench-modulator
+            # multiplier to exactly 1.0, i.e. pure TrueSkill.
+            persuasion_index=0.5,
+            betrayal_efficiency=1.0,
+            deception_resilience=0.5,
+        )
+        for faction in FACTIONS
+    ]
+
+    mmr_engine.update_match_ratings(snapshots, registry)
+
+    for faction in FACTIONS:
+        agent_id = faction_to_agent[faction]
+        profile = registry[agent_id]
+        record = records[faction]
+        record.mu = profile.mu
+        record.sigma = profile.sigma
+        record.conservative_mmr = profile.conservative_mmr
+        record.matches_played = profile.matches_played
+        if faction in winners:
+            record.wins += 1
+        await save_agent_state(agent_id, record.model_dump())
+
 async def game_loop(game_id: str):
     while True:
         await asyncio.sleep(1)
@@ -265,6 +357,8 @@ async def game_loop(game_id: str):
             game.step_phase()
             if was_orders_phase:
                 await update_caster_script(game)
+                if game.phase == Phase.FINISHED:
+                    await rate_finished_game(game)
             await save_game_state(game_id, game.to_state())
 
 async def spawn_game(
@@ -281,6 +375,12 @@ async def spawn_game(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    for agent_id, state in (await load_all_agent_states()).items():
+        record = server_hub.AgentRecord(**state)
+        server_hub.agents_db[record.api_key] = record
+        server_hub.agent_id_lookup[agent_id] = record.api_key
+    for agent_id, state in (await load_all_assigned_matches()).items():
+        server_hub.assigned_matches[agent_id] = state
     for game_id, state in (await load_all_game_states()).items():
         game = GameSession(game_id)
         game.restore(state)
@@ -333,6 +433,27 @@ def list_games():
         ]
     }
 
+@app.get("/api/v1/leaderboard")
+def get_leaderboard():
+    """Public, no auth (same convention as GET .../games): every
+    registered agent's real TrueSkill-derived rating, sorted by
+    conservative_mmr descending. Populated by rate_finished_game() -
+    only real 4-agent matches update it, never practice matches."""
+    rows = []
+    for record in server_hub.agents_db.values():
+        win_rate = (record.wins / record.matches_played * 100) if record.matches_played else 0.0
+        rows.append({
+            "agent_name": record.agent_name,
+            "developer_handle": record.developer_handle,
+            "model_identifier": record.model_identifier,
+            "matches_played": record.matches_played,
+            "wins": record.wins,
+            "win_rate": round(win_rate, 1),
+            "conservative_mmr": record.conservative_mmr,
+        })
+    rows.sort(key=lambda r: r["conservative_mmr"], reverse=True)
+    return {"leaderboard": rows}
+
 @app.post("/api/v1/practice")
 async def start_practice_match(
     map_mode: Literal["fixed", "generated"] = "fixed",
@@ -374,6 +495,7 @@ async def start_practice_match(
         "faction": human_faction,
         "timestamp": time.time(),
     }
+    await save_assigned_match(agent.agent_id, server_hub.assigned_matches[agent.agent_id])
     return {"status": "MATCH_FOUND", "game_id": game_id, "assigned_faction": human_faction}
 
 @app.get("/api/v1/games/{game_id}/state", response_model=GameState)

@@ -685,7 +685,8 @@ more than adding an import:
         `app/trueskill_engine.py` (now the sole rating engine — see the
         canonical-rating-system item below) and persist the result
         somewhere queryable — a meaningfully larger task than this item,
-        not attempted here.
+        not attempted here. **Since done — see "Wire TrueSkill into
+        game-finish + persist agents" further down.**
 - [x] **Add a practice-match mode (`POST /api/v1/practice`).** *(Done —
       the direct fix for the "solo human queues forever" gap above: lets
       anyone play immediately against the existing archetype bots
@@ -868,6 +869,92 @@ more than adding an import:
       of the rating math itself; wiring the surviving one into an actual
       post-match update + a real `GET /api/v1/leaderboard` endpoint is
       unstarted and meaningfully larger.
+- [x] **Wire TrueSkill into game-finish + persist agents, so the
+      leaderboard is real.** *(Done — verified: unit-level check of
+      `rate_finished_game()` directly (a hand-built 4-agent tie scenario:
+      confirmed `wins` correctly credited to both tied factions, rank-1's
+      `mu` increased, rank-4's decreased, and a practice-match
+      `GameSession` was skipped entirely with zero mutation); a
+      persistence round-trip (register an agent, full process restart,
+      confirm it's still there, still authorized to submit orders in its
+      in-progress game); and the real thing — 4 real agents registered,
+      driven through the actual matchmaker queue into one real game,
+      never submitting any orders (guaranteed Turn-10 4-way tie), left
+      running for real across a long, unplanned gap (a session
+      interruption spanning several hours) with no attention — confirmed
+      the game kept resolving correctly the entire time with no
+      supervision, finished with all 4 agents credited `wins=1`/
+      `win_rate=100.0` and distinct `conservative_mmr`s, and all of it
+      survived a subsequent full server restart. Full pytest suite
+      unaffected throughout (5/5).)*
+      This surfaced a real prerequisite that wasn't obvious upfront:
+      `app/server_hub.py`'s `agents_db`/`agent_id_lookup`/
+      `assigned_matches` were plain in-memory dicts, never touched by
+      `app/db.py` — a server restart already wiped every registered
+      agent's API key and match assignment, independent of ratings.
+      Fixed via two new SQLite tables (`app/db.py`'s `AgentRow`/
+      `AssignedMatchRow`, same JSON-blob-per-row pattern as the existing
+      `GameRecord`) and restore logic in `lifespan()`. This incidentally
+      fixes a latent bug: restarting mid-game used to leave every real
+      agent 403'd out of its own already-resumed game, since
+      `get_authorized_faction()` depends on `assigned_matches` surviving.
+      `matchmaking_queue` (agents waiting, not yet matched) is
+      deliberately **not** persisted — losing queue position on restart
+      is a minor re-join-once inconvenience, not the same class of bug;
+      a small, explicitly deferred follow-up.
+      `AgentRecord.elo_rating` (dead, hardcoded `1200.0`, never written by
+      anything - leftover from the deleted `app/elo_calibrator.py`) is
+      **removed**, replaced with real `mu`/`sigma`/`conservative_mmr`/
+      `wins` fields mirroring `TrueSkillProfile` (`matches_played`
+      already existed, now actually incremented) - a public API response
+      shape change on `POST /api/v1/agents/register`, flagged explicitly
+      since it never carried real data either way.
+      New `async def rate_finished_game()` (`app/main.py`), called from
+      `game_loop()` right after a step transitions a game to `FINISHED`.
+      Skips practice matches entirely (`game.bot_factions` non-empty) -
+      archetype bots have no `AgentRecord`, and this mirrors how
+      `app/gauntlet_runner.py`'s own bot-vs-candidate calibration battles
+      already never touch `agents_db` (fresh, throwaway registry per
+      call). Builds a `faction -> agent_id` map by scanning
+      `assigned_matches` for the finishing `game_id` (no such reverse
+      lookup existed before); skips (rather than guesses) if it doesn't
+      find all 4, covering e.g. an admin-created `POST /api/v1/games`
+      game with nobody matched into it. Ranks factions by final SC count
+      (same stable-sort convention `app/gauntlet_runner.py` already uses
+      for `placement_rank`), feeds neutral constants for TrueSkill's
+      "Diplomacy-Bench modulators" (`persuasion_index=0.5`,
+      `betrayal_efficiency=1.0`, `deception_resilience=0.5` - collapses
+      the bench-modulator multiplier to exactly `1.0`, i.e. pure
+      TrueSkill), and persists the result.
+      **Two honest, disclosed limitations, not fixed here:**
+      - No real per-match persuasion/betrayal/deception scoring is
+        derived from actual message/treaty history yet (see the neutral
+        constants above) - a separate, meaningfully larger task.
+      - A tied game result (e.g. two factions finishing with equal SCs)
+        is fully honored in `wins`/`win_rate` for every tied agent, but
+        `BayesianMMREngine` itself has no representation for a tied
+        placement - its adjacent-pairwise algorithm always treats sorted
+        index *i* as strictly beating index *i+1*, so tied factions still
+        get distinct (arbitrary-among-equals) placements for the actual
+        `mu`/`sigma` adjustment. This is a pre-existing limitation of the
+        shared rating engine, not something this hook works around -
+        confirmed directly in the E2E test above (all 4 agents tied and
+        credited a win, but their `conservative_mmr`s ended up different,
+        not identical).
+      New public `GET /api/v1/leaderboard` (no auth, same convention as
+      `GET /api/v1/games`): every agent, sorted by `conservative_mmr`
+      descending. `static/leaderboard.html` now fetches this for real
+      instead of `mockData` - also dropped the vendor-family filter
+      bar/badge and the "Betrayal Eff" column, since neither has an
+      honest per-agent data source (`AgentRecord` has no vendor field,
+      and betrayal efficiency isn't a stored per-agent stat, just a
+      per-match input defaulted to a neutral constant above); relabeled
+      "Elo Rating" → "MMR" since it's real TrueSkill `conservative_mmr`
+      now, not Elo.
+      Updated `static/API.md` (new "Leaderboard" section, the
+      `elo_rating`-removed/new-fields note on registration, and the
+      persistence/tie caveats above) and `CLAUDE.md`'s "Rating system"
+      section.
 - [ ] **Reconcile `PROJECT_HANDOFF.md`'s file index with actual layout.**
       It documents `scripts/streamer.sh` and `scripts/twitch_bot.py`, but
       both files actually live at the repo root (`scripts/` is empty). Either

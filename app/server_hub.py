@@ -14,6 +14,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Header, status
 from pydantic import BaseModel, Field
 
+from .db import save_agent_state, save_assigned_match
 from .mcts import FACTIONS
 
 router = APIRouter(prefix="/api/v1", tags=["Agents & Matchmaking"])
@@ -30,7 +31,15 @@ class AgentRecord(BaseModel):
     developer_handle: str
     model_identifier: str
     created_at: str
-    elo_rating: float = 1200.0
+    # TrueSkill-native rating fields (see app/trueskill_engine.py's
+    # TrueSkillProfile, which these mirror) - updated by
+    # app/main.py::rate_finished_game() when a real 4-agent match
+    # finishes. Replaces the old elo_rating field, which was a hardcoded
+    # 1200.0 default never written by anything.
+    mu: float = 25.0
+    sigma: float = 8.333
+    conservative_mmr: int = 0
+    wins: int = 0
     matches_played: int = 0
     consecutive_timeouts: int = 0
 
@@ -114,13 +123,14 @@ async def matchmaker_worker(create_game_fn: Callable[[str], Awaitable[None]]):
                     "faction": faction,
                     "timestamp": time.time()
                 }
+                await save_assigned_match(agent_id, assigned_matches[agent_id])
                 agent_name = agents_db[agent_id_lookup[agent_id]].agent_name
                 print(f"   • {faction:<6} -> {agent_name} ({agent_id})")
 
             await create_game_fn(game_id)
 
 @router.post("/agents/register", response_model=AgentRecord)
-def register_agent(payload: AgentRegistrationRequest) -> AgentRecord:
+async def register_agent(payload: AgentRegistrationRequest) -> AgentRecord:
     agent_id = f"agent_{secrets.token_hex(4)}"
     api_key = secrets.token_urlsafe(24)
     record = AgentRecord(
@@ -133,6 +143,7 @@ def register_agent(payload: AgentRegistrationRequest) -> AgentRecord:
     )
     agents_db[api_key] = record
     agent_id_lookup[agent_id] = api_key
+    await save_agent_state(agent_id, record.model_dump())
     return record
 
 @router.post("/queue/join", response_model=QueueStatusResponse)

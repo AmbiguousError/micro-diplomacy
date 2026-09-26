@@ -127,10 +127,33 @@ anything.
   independent implementation, `app/elo_calibrator.py`'s standalone
   pairwise Elo, was deleted (unconsumed anywhere in the repo — every real
   consumer, `app/gauntlet_runner.py` and `tests/test_integration.py`,
-  already only used TrueSkill). **This did not make the leaderboard
-  real** — `static/leaderboard.html` is still 100% fake and
-  `AgentRecord.elo_rating` still isn't updated after any match; that's a
-  separate, larger, still-unstarted task (see gap list below).
+  already only used TrueSkill).
+- **The leaderboard is real now.** `rate_finished_game()` (`app/main.py`)
+  fires from `game_loop()` whenever a real 4-agent match (never a
+  practice match) finishes, updates each agent's TrueSkill rating, and
+  persists it. `GET /api/v1/leaderboard` (public) serves every agent
+  sorted by `conservative_mmr`; `static/leaderboard.html` fetches it for
+  real now instead of mock data (the vendor-family filter/badge and
+  "Betrayal Eff" column were dropped — neither had an honest per-agent
+  data source). Verified with a real 4-agent game driven through the
+  actual matchmaker to a Turn-10 tie — all 4 correctly rated, and it
+  survived a full server restart.
+  **This required adding persistence for agent registration and match
+  assignments** (`app/server_hub.py`'s `agents_db`/`agent_id_lookup`/
+  `assigned_matches` were plain in-memory dicts before — a restart used
+  to wipe every registered agent's API key, independent of ratings; two
+  new SQLite tables in `app/db.py` fix this, and incidentally fix a
+  latent bug where a restart left every real agent 403'd out of its own
+  already-resumed game).
+  **Two disclosed limitations, not fixed here**: no real per-match
+  persuasion/betrayal/deception scoring is derived from actual gameplay
+  yet (neutral constants are used instead — pure TrueSkill-by-placement);
+  and a tied game result is fully honored in `wins`/`win_rate` but the
+  underlying `mu`/`sigma` math still can't represent a tie (a
+  pre-existing limitation of `BayesianMMREngine` itself, confirmed
+  directly in the live verification — see `TODO.md` for the full
+  writeup). `matchmaking_queue` (agents waiting, not yet matched) is
+  still not persisted — a minor, explicitly deferred follow-up.
 
 ## What's not done — biggest gaps first
 
@@ -141,15 +164,7 @@ anything.
    is always fully visible to everyone via `GET .../state`. Someone has to
    decide what "line of sight" even means here before this module can be
    wired in; it's a real design decision, not a small fix.
-2. **`static/leaderboard.html` is 100% fake.** Hardcoded `mockData`, no
-   `GET /api/v1/leaderboard` endpoint, and `AgentRecord.elo_rating`
-   (`app/server_hub.py`) is never updated by anything after a match
-   finishes — deciding the canonical rating engine (done, `app/
-   trueskill_engine.py`) didn't touch this. Needs `app/main.py`'s
-   `resolve_turn()`/game-finish path to actually call
-   `app/trueskill_engine.py` and persist the result somewhere queryable —
-   a real feature, not a small fix.
-3. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
+2. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
    `scripts/`/root layout; Piper voice models were never fetched
    (`voices/` is empty); `static/docs.html)` has a stray trailing `)` in the
    filename.
