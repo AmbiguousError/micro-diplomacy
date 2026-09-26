@@ -81,6 +81,15 @@
       </div>
     </header>
 
+    <!-- Live Battle Map -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-2">Theater Map</h2>
+      <svg viewBox="0 0 800 480" class="w-full h-64 drop-shadow-lg">
+        <g id="mapEdgesLayer" stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"></g>
+        <g id="mapNodesLayer"></g>
+      </svg>
+    </section>
+
     <main class="grid grid-cols-1 lg:grid-cols-2 gap-8 flex-1">
 
       <!-- LEFT COLUMN: DIPLOMACY & COMMUNICTIONS -->
@@ -169,6 +178,71 @@
       Southvale: ["Westmarch", "Centerlands", "Eastgate", "Sunport", "Duneport"],
       Duneport: ["Eastgate", "Southvale"],
     };
+
+    // Layout/visual constants for the SVG map, matching static/playground.html's
+    // sandbox map style - unlike playground's hardcoded (and slightly
+    // inaccurate) edge lines, edges here are derived from ADJACENCY above so
+    // they always match the territories actually in play.
+    const TERRITORIES = {
+      Northreach: { x: 220, y: 80 },
+      Ironpeaks: { x: 580, y: 80 },
+      Westmarch: { x: 130, y: 240 },
+      Centerlands: { x: 400, y: 240 },
+      Eastgate: { x: 670, y: 240 },
+      Sunport: { x: 220, y: 400 },
+      Southvale: { x: 400, y: 400 },
+      Duneport: { x: 580, y: 400 },
+    };
+    const SUPPLY_CENTERS = new Set(["Northreach", "Ironpeaks", "Sunport", "Duneport", "Centerlands", "Southvale"]);
+    const COLORS = {
+      Red: "#ef4444", Blue: "#3b82f6", Green: "#10b981", Yellow: "#f59e0b",
+    };
+    let mapEdgesDrawn = false;
+
+    function drawMapEdges() {
+      const g = document.getElementById("mapEdgesLayer");
+      const seen = new Set();
+      let html = "";
+      for (const [terr, neighbors] of Object.entries(ADJACENCY)) {
+        for (const neighbor of neighbors) {
+          const key = [terr, neighbor].sort().join("|");
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const a = TERRITORIES[terr];
+          const b = TERRITORIES[neighbor];
+          if (!a || !b) continue;
+          html += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" />`;
+        }
+      }
+      g.innerHTML = html;
+      mapEdgesDrawn = true;
+    }
+
+    function renderMap(map) {
+      if (!mapEdgesDrawn) drawMapEdges();
+      const g = document.getElementById("mapNodesLayer");
+      g.innerHTML = Object.entries(TERRITORIES).map(([name, meta]) => {
+        const tData = map[name] || {};
+        const isSC = SUPPLY_CENTERS.has(name);
+        const scColor = tData.sc_owner ? COLORS[tData.sc_owner] : "#1e293b";
+        const unitColor = tData.unit_faction ? COLORS[tData.unit_faction] : "transparent";
+        const isMine = tData.unit_faction === myFaction;
+        const strokeColor = isMine ? "#facc15" : (isSC ? "#f8fafc" : "#475569");
+        const strokeW = isMine ? "3.5" : (isSC ? "2.5" : "1.5");
+        let html = `<g>`;
+        html += `<circle cx="${meta.x}" cy="${meta.y}" r="38" fill="${scColor}" fill-opacity="0.25" stroke="${strokeColor}" stroke-width="${strokeW}" />`;
+        if (isSC) html += `<text x="${meta.x}" y="${meta.y - 44}" text-anchor="middle" font-size="14" fill="#fbbf24">★</text>`;
+        if (tData.unit_faction) {
+          html += `<circle cx="${meta.x}" cy="${meta.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
+          html += `<text x="${meta.x}" y="${meta.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff" font-family="monospace">${tData.unit_faction[0]}</text>`;
+        } else {
+          html += `<circle cx="${meta.x}" cy="${meta.y}" r="5" fill="#334155" />`;
+        }
+        html += `<text x="${meta.x}" y="${meta.y + 32}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+        html += `</g>`;
+        return html;
+      }).join("");
+    }
 
     const STATE_POLL_MS = 2000;
     const QUEUE_POLL_MS = 2000;
@@ -383,6 +457,8 @@
       document.getElementById("turnDisplay").textContent = state.turn;
       document.getElementById("phaseDisplay").textContent = state.phase;
       document.getElementById("timerDisplay").textContent = formatTimer(state.time_remaining_seconds);
+
+      renderMap(state.map);
 
       const myUnits = Object.entries(state.map)
         .filter(([, info]) => info.unit_faction === myFaction)

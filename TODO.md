@@ -388,6 +388,18 @@ more than adding an import:
 
 ## Gameplay logic gaps
 
+- [x] **Reduce the DIPLOMACY phase from 120s to 30s.** *(Done — a deliberate
+      pacing change, not a bug fix; requested to make matches (human or
+      practice) move faster. `GameSession.__init__` and the next-turn reset
+      in `resolve_turn()` (`app/main.py`) both set `self.time_remaining =
+      30` for a new/continuing DIPLOMACY phase — the ORDERS phase's own 30s
+      (`step_phase()`) was already that value and is unaffected. Updated
+      the three docs that quoted the old duration:
+      `static/RULES.md` ("DIPLOMACY (120s)" → "(30s)"), `static/API.md`
+      (`POST /api/v1/games`'s description of a freshly created game's
+      starting clock), and `static/index.html`'s "The Process" copy. Full
+      backend test suite still 5/5 after the change (none of the 5 tests
+      assert on the specific timer value, only on phase transitions).)*
 - [x] **Fix a silent unit-erasure bug in `Adjudicator.adjudicate()`.** *(Not on
       the original list — found by actually playing a simulated game turn by
       turn (see "how to observe the engine" below) and cross-checking one
@@ -596,6 +608,36 @@ more than adding an import:
       Games" section on `static/index.html` (auto-refreshes every 5s) —
       verified it correctly reflected the real game created during the
       jsdom test above.
+- [x] **Add a live visual map to `static/player.html`.** *(Done — a human
+      player previously had no board view at all, just the raw orders
+      form; `static/playground.html` already had a decorative SVG map for
+      its sandbox mode, so this reused its visual style (territory
+      circles, SC stars, colored unit tokens) for the real game state.
+      One correctness fix over the source it was styled after:
+      playground.html's map draws its edges from 11 hardcoded `<line>`
+      elements that are actually wrong for the real graph (they omit
+      Eastgate's real connections entirely and include a fabricated
+      Centerlands↔Duneport edge that doesn't exist in `ADJACENCY`) — since
+      this map reflects a real game, `player.html`'s edges are instead
+      derived programmatically from its own `ADJACENCY` constant, so they
+      can't drift from the graph the server actually adjudicates against.
+      Verified with jsdom against the real live server (installed fresh
+      into a scratch npm project — no jsdom install persisted from
+      earlier in this session): drove the page's own `handlePracticeClick()`
+      to get a real 4-faction practice match going, then asserted on the
+      rendered SVG DOM itself (not on the page's internal JS variables,
+      which — being top-level `let`/`const` in a classic script — don't
+      become `window` properties the way top-level `function`s do, a
+      scoping quirk that cost a couple of debugging iterations before
+      switching the test's assertions to DOM output): exactly 14 edge
+      lines drawn, matching the real `ADJACENCY` graph's unique-pair count;
+      all 8 territories rendered as nodes; all 4 starting units' faction
+      letters (R/B/G/Y) present; and the human's own unit specifically
+      (not just "a" unit) carries the gold highlight ring, cross-checked
+      against `myFactionLabel`'s actual DOM text.)*
+      `renderMap(state.map)` is called from the existing `renderState()`
+      poll handler, so it updates on the same 2s cadence as everything
+      else — no separate polling loop.
 
 ## Consolidation (multiple implementations of the same thing)
 

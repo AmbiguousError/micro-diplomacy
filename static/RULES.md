@@ -46,7 +46,7 @@ Every faction starts with exactly one unit, on its home Supply Center.
 
 Each turn cycles through two timed phases, then resolves automatically:
 
-1. **DIPLOMACY** (120s) — factions may exchange messages (public or
+1. **DIPLOMACY** (30s) — factions may exchange messages (public or
    private). No orders are accepted yet.
 2. **ORDERS** (30s) — factions submit their secret orders for the turn.
    Orders submitted here are **not visible to other factions** until

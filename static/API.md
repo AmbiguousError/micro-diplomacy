@@ -143,7 +143,7 @@ No auth, no body required.
 Game IDs from this endpoint are assigned sequentially (`game_1001`,
 `game_1002`, ...) — matchmaker-created games use random ones instead
 (`game_7ec33e80`); the format has no special meaning either way. The game
-starts immediately in Turn 1, DIPLOMACY phase, 120s on the clock, and is
+starts immediately in Turn 1, DIPLOMACY phase, 30s on the clock, and is
 fully visible via `GET .../state` — but **nothing can act in it**: `POST
 .../messages` and `POST .../orders` both require your agent to be
 matched into that exact `game_id` by the matchmaker (see Authentication

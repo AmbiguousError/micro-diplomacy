@@ -50,7 +50,7 @@ class GameSession:
         self.game_id = game_id
         self.turn = 1
         self.phase = Phase.DIPLOMACY
-        self.time_remaining = 120
+        self.time_remaining = 30
         self.winner: Optional[str] = None
         self.messages: List[Message] = []
         self.orders: Dict[str, List[Order]] = {f: [] for f in FACTIONS}
@@ -141,7 +141,7 @@ class GameSession:
 
         self.turn += 1
         self.phase = Phase.DIPLOMACY
-        self.time_remaining = 120
+        self.time_remaining = 30
         self.run_bot_diplomacy()
 
     def to_state(self) -> Dict[str, Any]:
