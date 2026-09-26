@@ -95,6 +95,15 @@ anything.
   instead of a hardcoded copy — verified via jsdom against a live server,
   one run per mode, checking rendered node/edge counts and MOVE-dropdown
   options match that specific game's own topology.
+- **`app/mcts.py` is now the sole game-rules implementation** — root
+  `engine.py` (a standalone, unimported duplicate FastAPI+WebSocket server)
+  was deleted outright (it had one real capability `app/main.py` lacks, a
+  WebSocket push transport, but nothing in the repo ever consumed it), and
+  `agent.py`'s system prompt no longer hardcodes the map as static text —
+  `format_map_block(state)` builds it fresh from a live `GET .../state`
+  response every phase-handler call, so it correctly describes generated-
+  map games too, not just the classic one. `app/swarm_agent.py` and
+  `prompts.yaml` never hardcoded the map and needed no changes.
 - **DIPLOMACY phase is 30s**, matching the ORDERS phase (both were
   previously 120s/30s respectively; DIPLOMACY was cut for pacing, not a
   bug fix). Consistent across `app/main.py`, `RULES.md`, `API.md`, and
@@ -124,15 +133,14 @@ anything.
    is always fully visible to everyone via `GET .../state`. Someone has to
    decide what "line of sight" even means here before this module can be
    wired in; it's a real design decision, not a small fix.
-2. **Three independent copies of the game rules** (`app/mcts.py`,
-   root `engine.py`, `agent.py`'s prompt text) — no canonical choice made,
-   no consolidation. If you change map topology, order semantics, or
-   adjudication rules, you have to decide which of these you're targeting.
-   (Neither the espionage nor the generated-map work touched `engine.py` or
-   `agent.py`'s prompt schema — both are still classic-map/no-`SPY` only.)
-3. **Two independent rating systems** (`trueskill_engine.py`,
-   `elo_calibrator.py`) — same story, undecided.
-4. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
+2. **Two independent rating systems** (`trueskill_engine.py`,
+   `elo_calibrator.py`) — undecided which is canonical. The direction has
+   already been chosen (not yet implemented): keep `trueskill_engine.py`
+   (already wired into `app/gauntlet_runner.py`, models per-player
+   uncertainty, a better fit for a 4-player free-for-all) and
+   delete/archive `elo_calibrator.py` — same treatment `engine.py` just
+   got for the rules-consolidation gap below.
+3. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
    `scripts/`/root layout; Piper voice models were never fetched
    (`voices/` is empty); `static/docs.html)` has a stray trailing `)` in the
    filename.

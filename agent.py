@@ -22,14 +22,7 @@ OBJECTIVE:
 Control 5 Supply Centers (SCs) to win, or hold the most SCs by Turn 10.
 
 MAP TOPOLOGY & SUPPLY CENTERS (* = SC):
-- Northreach* (Adjacencies: Ironpeaks, Westmarch, Centerlands)
-- Ironpeaks* (Adjacencies: Northreach, Centerlands, Eastgate)
-- Westmarch (Adjacencies: Northreach, Centerlands, Sunport, Southvale)
-- Centerlands* (Adjacencies: Northreach, Ironpeaks, Westmarch, Eastgate, Southvale)
-- Eastgate (Adjacencies: Ironpeaks, Centerlands, Southvale, Duneport)
-- Sunport* (Adjacencies: Westmarch, Southvale)
-- Southvale* (Adjacencies: Westmarch, Centerlands, Eastgate, Sunport, Duneport)
-- Duneport* (Adjacencies: Eastgate, Southvale)
+{map_block}
 
 GAME MECHANICS:
 1. Every faction has 1 Army per controlled territory.
@@ -44,6 +37,22 @@ STRATEGIC PLAYBOOK:
 - DIPLOMACY PHASE: Exchange private messages or public broadcasts. Form alliances, propose joint attacks, coordinate supports, or bluff.
 - ORDERS PHASE: Commit your final move/hold/support actions. Deliver on promises or execute calculated backstabs if it secures game victory.
 """
+
+
+def format_map_block(state: Dict[str, Any]) -> str:
+    """Builds the map/SC list from the live GET .../state response instead
+    of a hardcoded copy - state["adjacency"]/["supply_centers"] vary per
+    game now that the server supports randomized maps (see API.md's
+    "Generated Maps")."""
+    adjacency = state.get("adjacency", {})
+    supply_centers = set(state.get("supply_centers", []))
+    lines = []
+    for terr in sorted(adjacency):
+        marker = "*" if terr in supply_centers else ""
+        neighbors = ", ".join(sorted(adjacency[terr]))
+        lines.append(f"- {terr}{marker} (Adjacencies: {neighbors})")
+    return "\n".join(lines)
+
 
 DIPLOMACY_TOOLS = [
     {
@@ -206,7 +215,7 @@ class MicroDiplomacyAgent:
             "visible_messages": messages,
         }
 
-        system_msg = SYSTEM_PROMPT.format(faction=self.faction)
+        system_msg = SYSTEM_PROMPT.format(faction=self.faction, map_block=format_map_block(state))
         conversation = [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": f"Current Game State:\n{json.dumps(prompt_context, indent=2)}\n\nAnalyze board positions and conversations. Send any strategic messages or conclude your diplomacy turn."},
@@ -247,7 +256,7 @@ class MicroDiplomacyAgent:
             "recent_chat_agreements": messages,
         }
 
-        system_msg = SYSTEM_PROMPT.format(faction=self.faction)
+        system_msg = SYSTEM_PROMPT.format(faction=self.faction, map_block=format_map_block(state))
         user_prompt = f"Game State for Orders:\n{json.dumps(prompt_context, indent=2)}\n\nYou control units in: {my_units}. Issue exactly one order (HOLD, MOVE, or SUPPORT) for each unit you control via submit_turn_orders."
 
         response = self.client.chat.completions.create(

@@ -783,24 +783,65 @@ more than adding an import:
 
 ## Consolidation (multiple implementations of the same thing)
 
-- [ ] **Decide the canonical game-rules implementation and archive/delete the
-      others, or generate them from one source.** Map topology + adjudication
-      logic currently exists independently in `app/mcts.py` (used by
-      `app/main.py`), root `engine.py` (a separate standalone
-      FastAPI+WebSocket server, `uvicorn engine:app`), and root `agent.py`
-      (rules restated as prose inside its system-prompt string). `app/mcts.py`
-      is the one the tests and gauntlet target, so it's the de facto
-      canonical copy. Either delete/archive `engine.py`, or clearly mark it as
-      an experimental alternate implementation so future rule changes don't
-      silently only land in one of the three.
+- [x] **Decide the canonical game-rules implementation and archive/delete the
+      others.** *(Done — verified: `pytest tests/` stays 5/5 (nothing
+      imported `engine.py` or exercised `agent.py`'s prompt at test time);
+      `python -c "import ast; ast.parse(open('agent.py').read())"` confirms
+      `agent.py` still parses cleanly after the template change; a
+      repo-wide grep for `engine.py`/`engine:app`/`from engine import`
+      turns up nothing left except historical mentions in this file's own
+      past-tense entries.)*
+      Chose deletion over archiving for `engine.py`. Map topology +
+      adjudication logic had existed independently in `app/mcts.py` (used
+      by `app/main.py`, the only server this project runs), root
+      `engine.py` (a separate standalone FastAPI+WebSocket server), and
+      root `agent.py` (rules restated as prose inside its system-prompt
+      string). `app/mcts.py` was already the de facto canonical copy —
+      every feature shipped this session (auth, treaties, practice mode,
+      espionage, generated maps) only ever landed there.
+      `engine.py` **deleted outright**: confirmed via a full read plus a
+      repo-wide grep that it was genuinely dead (no imports from `app/`,
+      nothing in the repo imports/runs it, no CI/systemd/Docker reference —
+      `docker-compose.yml`'s `diplomacy-engine` service name is a naming
+      coincidence, it builds `Dockerfile`, which runs `uvicorn
+      app.main:app`), and that its own game logic was a strict subset of
+      `app/mcts.py`'s (missing treaties, espionage, practice mode, real
+      matchmaking, persistence, generated maps). Worth recording explicitly
+      since it's not risk-free: `engine.py` did have one real capability
+      `app/main.py` doesn't — a WebSocket endpoint pushing live state
+      updates, vs. `app/main.py`'s pull-only `GET .../state` (polled every
+      2s by `player.html`) — but nothing in the repo ever consumed it (no
+      client anywhere opened a WebSocket), so nothing broke by removing it.
+      If real-time push delivery is ever wanted, build it fresh against
+      `app/main.py` rather than trying to resurrect this file.
+      `agent.py` **fixed instead of deleted** (it's a real reference
+      client, not dead code): added `format_map_block(state)`, which builds
+      the "MAP TOPOLOGY & SUPPLY CENTERS" prompt block from a live
+      `GET .../state` response's `adjacency`/`supply_centers` fields;
+      `SYSTEM_PROMPT` now has a `{map_block}` placeholder instead of 8
+      hardcoded territory lines, filled in at both call sites
+      (`handle_diplomacy_phase`, `handle_orders_phase`) from the `state`
+      dict each already has in hand — the prompt was already being rebuilt
+      fresh every phase-handler call, never cached, so this needed no
+      restructuring. It now correctly describes a generated-map game too,
+      not just the classic one. Did **not** add `"SPY"` to `agent.py`'s
+      `ORDER_TOOL`/`DIPLOMACY_TOOLS` JSON schemas (still
+      `["HOLD", "MOVE", "SUPPORT"]`) — giving the reference agent actual
+      espionage capability is a separate task from fixing its map
+      description.
+      Confirmed out of scope, no changes needed: `app/swarm_agent.py`
+      (never hardcoded the map — always passed the server's raw state dict
+      straight into its prompts) and `prompts.yaml` (generic
+      strategic-doctrine text, no map content at all).
       `static/player.html`'s order-submission UI was briefly a fourth
-      hardcoded copy of the map (`ADJACENCY` inline, to populate
-      `MOVE`/`SUPPORT` destination dropdowns) — **fixed**: it now fetches
-      `adjacency`/`supply_centers`/`coordinates` fresh from
-      `GET .../state` every render instead of a local constant (see
+      hardcoded copy of the map — already fixed earlier this session (see
       "Wiring the disconnected subsystems" above, the `map_generator.py`
-      item), so this specific duplication is resolved. The remaining three
-      (`app/mcts.py`, `engine.py`, `agent.py`) are not.
+      item): it fetches `adjacency`/`supply_centers`/`coordinates` fresh
+      from `GET .../state` every render instead of a local constant.
+      **`app/mcts.py` is now the sole game-rules implementation** — updated
+      `CLAUDE.md`'s architecture section to match (deleted the "Two
+      parallel, non-interoperating implementations" framing along with the
+      now-nonexistent `uvicorn engine:app` run instructions).
 - [ ] **Decide the canonical rating system.** `app/trueskill_engine.py` (used
       by `app/gauntlet_runner.py`) and `app/elo_calibrator.py` (standalone,
       only exercised by its own `if __name__ == "__main__"` demo) are two

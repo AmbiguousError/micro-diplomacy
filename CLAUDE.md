@@ -23,11 +23,6 @@ Run the referee server (the modular package under `app/`):
 uvicorn app.main:app --reload --port 8000
 ```
 
-Run the standalone alternate server (see "Two parallel implementations" below):
-```bash
-uvicorn engine:app --reload --port 8000
-```
-
 Run tests:
 ```bash
 pytest tests/ -v
@@ -41,15 +36,15 @@ python agent.py --game-id game_1001 --faction Red --api-key sk-...
 
 ## Architecture
 
-### Two parallel, non-interoperating implementations
+### `app/mcts.py` is the sole game-rules implementation
 
-The game rules (map adjacency, supply centers, order types, adjudication/dislodgement logic) are implemented **independently in three places** and are not shared code:
+The map/adjudication logic (map adjacency, supply centers, order types, adjudication/dislodgement logic) used to be duplicated three ways; `app/mcts.py`'s `Adjudicator` (used by `app/main.py`, the only server this project actually runs) is now the single canonical copy:
 
-- `app/mcts.py` — `Adjudicator`, used by `app/main.py` (the package entrypoint, `uvicorn app.main:app`).
-- `engine.py` (repo root) — a self-contained single-file FastAPI+WebSocket server with its own copy of the map/adjudication logic. Runs standalone via `uvicorn engine:app`, independent of `app/`.
-- `agent.py` (repo root) — a standalone reference OpenAI-based competitor client with the map/rules baked into its system prompt string, separate from `app/swarm_agent.py`'s `WarRoomSwarm` reference client.
+- `engine.py` (repo root) — a standalone single-file FastAPI+WebSocket server with its own copy of the same logic — was **deleted**. It was unimported/unused anywhere in the repo, and its game logic was a strict subset of `app/mcts.py`'s (missing treaties, espionage, practice mode, real matchmaking, persistence, generated maps). It did have one real capability `app/main.py` doesn't — a WebSocket push transport for live updates — but nothing in the repo ever consumed it (no client opened a WebSocket); if real-time push delivery is wanted later, build it fresh against `app/main.py` rather than resurrecting this file.
+- `agent.py` (repo root, a standalone reference OpenAI-based competitor client) no longer hardcodes the map as static prompt text — `format_map_block()` builds it fresh from a live `GET .../state` response's `adjacency`/`supply_centers` fields every phase handler call, so it can't drift out of sync with the server and correctly describes a generated-map game too, not just the classic one.
+- `app/swarm_agent.py` (`WarRoomSwarm`, a second reference client) never hardcoded the map — it always passed the server's raw state dict straight into its prompts.
 
-If you change map topology, order semantics, or adjudication rules, decide which of these you're targeting — a fix in `app/mcts.py` will not propagate to `engine.py` or `agent.py`'s prompt text.
+A fix to map topology/order semantics/adjudication rules now only needs to land in `app/mcts.py` — nothing else duplicates it.
 
 ### `app/main.py` is a minimal core; most `app/` modules are unwired subsystems
 
