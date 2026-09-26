@@ -55,7 +55,6 @@ A fix to map topology/order semantics/adjudication rules now only needs to land 
 - `app/dual_caster.py` — LLM-generated two-host esports commentary script, feeding Piper TTS.
 - `app/map_generator.py` — Delaunay-triangulation procedural map generator (produces topologies compatible with the fixed 8-node/6-SC layout used elsewhere).
 - `app/intel_matrix.py` — fog-of-war belief-state/credibility tracking for espionage and scouting reports.
-- `app/elo_calibrator.py` — a second, separate rating system (`WeightedEloCalibrator`) alongside `app/trueskill_engine.py`'s Bayesian TrueSkill 2 engine; not imported anywhere else (has its own `if __name__ == "__main__"` demo).
 
 When wiring one of these into `main.py`, check its current standalone tests/demos first — several were written and tested in isolation, not against `GameSession`.
 
@@ -67,11 +66,11 @@ When wiring one of these into `main.py`, check its current standalone tests/demo
 - `app/treaties_engine.py` layers on top: signed treaties (`NON_AGGRESSION`/`DMZ`/`SUPPORT_PROMISE`) checked against submitted orders each turn; a breach flags the violator `PERFIDIOUS` and grants the victim a `+1` defensive buff (this buff is computed by `TreatyAndEspionageEngine` but is not currently read by `Adjudicator.adjudicate()` — see the test in `tests/test_integration.py::test_master_e2e_betrayal_pipeline`, which asserts around this gap rather than the buff actually changing combat resolution).
 - Authentication is now a real per-agent API key (`app/server_hub.py`, wired into `app/main.py` as of the auth migration — see `TODO.md`): `POST /api/v1/agents/register` issues an `api_key`; `POST /api/v1/queue/join` + polling `GET /api/v1/queue/status` gets you matched into a `game_id` with an assigned faction (both decided by the matchmaker, not the caller). `get_authorized_faction()` in `app/main.py` validates the API key *and* that the caller is actually matched into the `game_id` in the URL before allowing `POST .../messages`/`.../orders`. `POST /api/v1/games` (direct, unauthenticated creation) still exists for admin/testing/spectating, but nothing can act in a game created that way, since no agent is matched into it.
 
-### Rating systems
+### Rating system
 
-Two independent 4-player rating engines exist, both consuming the same "Diplomacy-Bench modulators" (persuasion index, betrayal efficiency, deception resilience) as multipliers on top of a base algorithm:
-- `app/trueskill_engine.py` — Gaussian belief-propagation (TrueSkill 2 style), `μ=25.0, σ=8.333` priors, MMR = `max(0, round((μ - 3σ) × 100))`. Used by `app/gauntlet_runner.py`.
-- `app/elo_calibrator.py` — pairwise round-robin Elo with zero-sum drift correction. Standalone, not currently consumed elsewhere.
+`app/trueskill_engine.py` is the sole rating engine — Gaussian belief-propagation (TrueSkill 2 style), `μ=25.0, σ=8.333` priors, MMR = `max(0, round((μ - 3σ) × 100))`, consuming the "Diplomacy-Bench modulators" (persuasion index, betrayal efficiency, deception resilience) as multipliers on top of the base algorithm. Used by `app/gauntlet_runner.py` and `tests/test_integration.py`. (A second, independent implementation, `app/elo_calibrator.py`'s pairwise round-robin Elo, was deleted — it was standalone and unconsumed anywhere in the repo.)
+
+**Still true regardless of which rating engine exists:** `static/leaderboard.html` is 100% fake (hardcoded `mockData`, no `GET /api/v1/leaderboard` endpoint), and `AgentRecord.elo_rating` (`app/server_hub.py`) is never updated by anything after a match finishes. Picking a canonical rating module didn't make the leaderboard real — that needs `app/main.py`'s game-finish path to actually call `app/trueskill_engine.py` and persist the result somewhere queryable, a separate and meaningfully larger task (see `TODO.md`).
 
 ### Broadcast/streaming pipeline (root-level, outside `app/`)
 

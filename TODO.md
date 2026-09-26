@@ -682,7 +682,7 @@ more than adding an import:
         endpoint, and `AgentRecord.elo_rating` (`app/server_hub.py`) is
         never updated by anything after a match. Building a real one needs
         `app/main.py`'s `resolve_turn()`/game-finish path to actually call
-        `app/trueskill_engine.py` or `app/elo_calibrator.py` (see the
+        `app/trueskill_engine.py` (now the sole rating engine — see the
         canonical-rating-system item below) and persist the result
         somewhere queryable — a meaningfully larger task than this item,
         not attempted here.
@@ -842,13 +842,32 @@ more than adding an import:
       `CLAUDE.md`'s architecture section to match (deleted the "Two
       parallel, non-interoperating implementations" framing along with the
       now-nonexistent `uvicorn engine:app` run instructions).
-- [ ] **Decide the canonical rating system.** `app/trueskill_engine.py` (used
-      by `app/gauntlet_runner.py`) and `app/elo_calibrator.py` (standalone,
-      only exercised by its own `if __name__ == "__main__"` demo) are two
-      independent implementations of the same Diplomacy-Bench-weighted rating
-      idea. Pick one as canonical for the public leaderboard, or explicitly
-      wire the other in as a secondary/alternate rating and document why both
-      exist.
+- [x] **Decide the canonical rating system.** *(Done — verified: `pytest
+      tests/` stays 5/5 (`tests/test_integration.py` already only imported
+      `app.trueskill_engine`, never `app.elo_calibrator`); a repo-wide grep
+      for `elo_calibrator`/`WeightedEloCalibrator` turns up nothing left
+      except historical mentions in this file's own past-tense entries and
+      `handover.md`'s already-updated gap list.)*
+      `app/trueskill_engine.py` (used by `app/gauntlet_runner.py` and
+      `tests/test_integration.py`) and `app/elo_calibrator.py` (fully
+      standalone — confirmed via grep it was only ever exercised by its own
+      `if __name__ == "__main__"` demo, imported nowhere else) were two
+      independent implementations of the same Diplomacy-Bench-weighted
+      rating idea. Chose TrueSkill: already the one every real consumer in
+      the repo used, and a better fit for a 4-player free-for-all (models
+      per-player uncertainty via σ, not just a single skill number).
+      `app/elo_calibrator.py` **deleted** — same treatment `engine.py` got
+      for the rules-consolidation item above, for the same reason (dead,
+      standalone, zero real consumers).
+      **This does not make the leaderboard real** — that's a separate,
+      already-noted gap (see "Confirmed `static/leaderboard.html` is 100%
+      fake" above): `AgentRecord.elo_rating` still isn't updated by
+      anything after a match, since nothing in `app/main.py`'s
+      `resolve_turn()`/game-finish path calls `app/trueskill_engine.py` at
+      all yet. This item only removed the redundant second implementation
+      of the rating math itself; wiring the surviving one into an actual
+      post-match update + a real `GET /api/v1/leaderboard` endpoint is
+      unstarted and meaningfully larger.
 - [ ] **Reconcile `PROJECT_HANDOFF.md`'s file index with actual layout.**
       It documents `scripts/streamer.sh` and `scripts/twitch_bot.py`, but
       both files actually live at the repo root (`scripts/` is empty). Either

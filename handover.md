@@ -123,6 +123,14 @@ anything.
   `OPENAI_API_KEY` had been available to test with a real model (verified
   instead with a mocked client plus a live run confirming graceful failure
   with no key). Re-check whether this is still true before assuming it is.
+- **`app/trueskill_engine.py` is now the sole rating engine.** The other
+  independent implementation, `app/elo_calibrator.py`'s standalone
+  pairwise Elo, was deleted (unconsumed anywhere in the repo — every real
+  consumer, `app/gauntlet_runner.py` and `tests/test_integration.py`,
+  already only used TrueSkill). **This did not make the leaderboard
+  real** — `static/leaderboard.html` is still 100% fake and
+  `AgentRecord.elo_rating` still isn't updated after any match; that's a
+  separate, larger, still-unstarted task (see gap list below).
 
 ## What's not done — biggest gaps first
 
@@ -133,13 +141,14 @@ anything.
    is always fully visible to everyone via `GET .../state`. Someone has to
    decide what "line of sight" even means here before this module can be
    wired in; it's a real design decision, not a small fix.
-2. **Two independent rating systems** (`trueskill_engine.py`,
-   `elo_calibrator.py`) — undecided which is canonical. The direction has
-   already been chosen (not yet implemented): keep `trueskill_engine.py`
-   (already wired into `app/gauntlet_runner.py`, models per-player
-   uncertainty, a better fit for a 4-player free-for-all) and
-   delete/archive `elo_calibrator.py` — same treatment `engine.py` just
-   got for the rules-consolidation gap below.
+2. **`static/leaderboard.html` is 100% fake.** Hardcoded `mockData`, no
+   `GET /api/v1/leaderboard` endpoint, and `AgentRecord.elo_rating`
+   (`app/server_hub.py`) is never updated by anything after a match
+   finishes — deciding the canonical rating engine (done, `app/
+   trueskill_engine.py`) didn't touch this. Needs `app/main.py`'s
+   `resolve_turn()`/game-finish path to actually call
+   `app/trueskill_engine.py` and persist the result somewhere queryable —
+   a real feature, not a small fix.
 3. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
    `scripts/`/root layout; Piper voice models were never fetched
    (`voices/` is empty); `static/docs.html)` has a stray trailing `)` in the
