@@ -51,7 +51,7 @@
   <div id="gameView" class="hidden flex-1 flex-col">
 
     <!-- Finished banner -->
-    <div id="finishedBanner" class="hidden bg-indigo-950 border border-indigo-800 rounded-2xl p-4 mb-6 flex items-center justify-between">
+    <div id="finishedBanner" class="hidden bg-indigo-950 border border-indigo-800 rounded-2xl p-4 mb-6 flex flex-wrap items-center justify-between gap-3">
       <div>
         <p class="text-[10px] uppercase tracking-widest text-indigo-400 font-bold">Game Over</p>
         <p class="text-lg font-black text-white" id="finishedText">Winner: -</p>
@@ -63,24 +63,24 @@
     </div>
 
     <!-- Header: Game Status & Phase -->
-    <header class="flex justify-between items-end border-b border-slate-800 pb-4 mb-6">
+    <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 border-b border-slate-800 pb-4 mb-6">
       <div>
-        <h1 class="text-3xl font-black uppercase tracking-wider text-white">Command Deck</h1>
+        <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">Command Deck</h1>
         <p class="text-slate-400 text-sm mt-1">Playing as <span id="myFactionLabel" class="font-bold">-</span> in <span id="gameIdLabel" class="font-mono text-slate-500">-</span></p>
         <p id="botOpponentsLabel" class="hidden text-[11px] text-indigo-400 mt-1"></p>
       </div>
-      <div class="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner">
-        <div class="text-center px-4 border-r border-slate-700">
+      <div class="flex items-center gap-2 sm:gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner self-stretch sm:self-auto">
+        <div class="flex-1 sm:flex-none text-center px-2 sm:px-4 border-r border-slate-700">
           <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Turn</span>
-          <span class="text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
+          <span class="text-xl sm:text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
         </div>
-        <div class="text-center px-4 border-r border-slate-700">
+        <div class="flex-1 sm:flex-none text-center px-2 sm:px-4 border-r border-slate-700">
           <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Phase</span>
-          <span class="text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
+          <span class="text-base sm:text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
         </div>
-        <div class="text-center px-4">
+        <div class="flex-1 sm:flex-none text-center px-2 sm:px-4">
           <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Time Remaining</span>
-          <span class="text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:00</span>
+          <span class="text-xl sm:text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:00</span>
         </div>
       </div>
     </header>
@@ -497,7 +497,7 @@
         const desc = Object.entries(botFactions)
           .map(([f, archetype]) => `${f} (${archetype.replace(/([a-z])([A-Z])/g, "$1 $2")})`)
           .join(", ");
-        botOpponentsLabel.textContent = `Practice match — bots: ${desc}`;
+        botOpponentsLabel.textContent = `Practice match - bots: ${desc}`;
         botOpponentsLabel.classList.remove("hidden");
       } else {
         botOpponentsLabel.classList.add("hidden");
