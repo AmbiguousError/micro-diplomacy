@@ -88,9 +88,13 @@ anything.
   `ADJACENCY`/`SUPPLY_CENTERS`/`STARTING_POSITIONS` as globals — those
   globals still exist unchanged and are still what every *fixed*-map game
   uses by default. `GET .../state` exposes a game's real
-  `map_mode`/`adjacency`/`supply_centers`/`coordinates`. **No frontend for
-  it** — `player.html` still hardcodes the classic map client-side (see
-  gap #2 below), so it only renders/works correctly for fixed-map games.
+  `map_mode`/`adjacency`/`supply_centers`/`coordinates`. **`player.html`
+  now supports it too**: a "🎲 Random map" checkbox next to "Practice vs
+  Bots" requests `?map_mode=generated`, and the page fetches its
+  adjacency/coordinates/SC set fresh from `GET .../state` every render
+  instead of a hardcoded copy — verified via jsdom against a live server,
+  one run per mode, checking rendered node/edge counts and MOVE-dropdown
+  options match that specific game's own topology.
 - **DIPLOMACY phase is 30s**, matching the ORDERS phase (both were
   previously 120s/30s respectively; DIPLOMACY was cut for pacing, not a
   bug fix). Consistent across `app/main.py`, `RULES.md`, `API.md`, and
@@ -120,22 +124,15 @@ anything.
    is always fully visible to everyone via `GET .../state`. Someone has to
    decide what "line of sight" even means here before this module can be
    wired in; it's a real design decision, not a small fix.
-2. **`player.html` can't render or play a generated map.** It hardcodes the
-   classic map's adjacency and SVG layout coordinates client-side (for
-   both rendering and client-side move-legality checks), so a
-   `map_mode=generated` game will mis-render/wrongly reject legal moves
-   there — works fine via direct API calls (agents, `curl`), just not
-   through the human UI yet. Fix is to fetch `adjacency`/`coordinates`
-   from `GET .../state` instead of the hardcoded constants.
-3. **Three independent copies of the game rules** (`app/mcts.py`,
+2. **Three independent copies of the game rules** (`app/mcts.py`,
    root `engine.py`, `agent.py`'s prompt text) — no canonical choice made,
    no consolidation. If you change map topology, order semantics, or
    adjudication rules, you have to decide which of these you're targeting.
    (Neither the espionage nor the generated-map work touched `engine.py` or
    `agent.py`'s prompt schema — both are still classic-map/no-`SPY` only.)
-4. **Two independent rating systems** (`trueskill_engine.py`,
+3. **Two independent rating systems** (`trueskill_engine.py`,
    `elo_calibrator.py`) — same story, undecided.
-5. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
+4. Cosmetic/small: `PROJECT_HANDOFF.md`'s file index doesn't match the real
    `scripts/`/root layout; Piper voice models were never fetched
    (`voices/` is empty); `static/docs.html)` has a stray trailing `)` in the
    filename.

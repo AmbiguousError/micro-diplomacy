@@ -33,6 +33,10 @@
         <button id="practiceBtn" onclick="handlePracticeClick()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2.5 rounded-xl text-sm transition">
           Practice vs Bots
         </button>
+        <label class="flex items-center justify-center gap-2 text-slate-500 text-xs mt-2 cursor-pointer select-none">
+          <input type="checkbox" id="randomMapToggle" class="accent-indigo-500">
+          🎲 Random map (instead of the classic layout)
+        </label>
         <p class="text-slate-600 text-[11px] mt-2 text-center">Practice starts instantly against 3 built-in bots. Find Match waits for 3 other real agents.</p>
       </div>
 
@@ -84,7 +88,7 @@
     <!-- Live Battle Map -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
       <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-2">Theater Map</h2>
-      <svg viewBox="0 0 800 480" class="w-full h-64 drop-shadow-lg">
+      <svg viewBox="0 0 800 500" class="w-full h-64 drop-shadow-lg">
         <g id="mapEdgesLayer" stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"></g>
         <g id="mapNodesLayer"></g>
       </svg>
@@ -161,28 +165,18 @@
      * see static/API.md for the exact request/response shapes this
      * mirrors.
      *
-     * ADJACENCY/SUPPLY_CENTERS below are a duplicate of app/mcts.py's
-     * canonical copy (needed here to validate MOVE/SUPPORT destinations
-     * client-side) - if the map topology ever changes, this needs
-     * updating too. This is the same kind of map-data duplication
-     * TODO.md already tracks for engine.py/agent.py; worth consolidating
-     * behind a single endpoint later rather than adding a fourth copy.
+     * Map topology (adjacency/supply centers/layout coordinates) is NOT
+     * hardcoded here - it's read from GET .../state's own
+     * adjacency/supply_centers/coordinates fields every render (see
+     * updateTopologyFromState below), since a game can run on either the
+     * classic fixed map or a randomized one (?map_mode=generated - see
+     * API.md's "Generated Maps" section). TERRITORIES below is only a
+     * fallback layout for the fixed map, which doesn't get server-computed
+     * coordinates (only generated games do, from app/map_generator.py).
      */
-    const ADJACENCY = {
-      Northreach: ["Ironpeaks", "Westmarch", "Centerlands"],
-      Ironpeaks: ["Northreach", "Centerlands", "Eastgate"],
-      Westmarch: ["Northreach", "Centerlands", "Sunport", "Southvale"],
-      Centerlands: ["Northreach", "Ironpeaks", "Westmarch", "Eastgate", "Southvale"],
-      Eastgate: ["Ironpeaks", "Centerlands", "Southvale", "Duneport"],
-      Sunport: ["Westmarch", "Southvale"],
-      Southvale: ["Westmarch", "Centerlands", "Eastgate", "Sunport", "Duneport"],
-      Duneport: ["Eastgate", "Southvale"],
-    };
-
     // Layout/visual constants for the SVG map, matching static/playground.html's
-    // sandbox map style - unlike playground's hardcoded (and slightly
-    // inaccurate) edge lines, edges here are derived from ADJACENCY above so
-    // they always match the territories actually in play.
+    // sandbox map style. Used only when a game's own state.coordinates is
+    // empty (i.e. a "fixed"-map game) - see updateTopologyFromState.
     const TERRITORIES = {
       Northreach: { x: 220, y: 80 },
       Ironpeaks: { x: 580, y: 80 },
@@ -193,37 +187,58 @@
       Southvale: { x: 400, y: 400 },
       Duneport: { x: 580, y: 400 },
     };
-    const SUPPLY_CENTERS = new Set(["Northreach", "Ironpeaks", "Sunport", "Duneport", "Centerlands", "Southvale"]);
     const COLORS = {
       Red: "#ef4444", Blue: "#3b82f6", Green: "#10b981", Yellow: "#f59e0b",
     };
-    let mapEdgesDrawn = false;
+    // This game's actual topology, refreshed every renderState() call from
+    // the server's own state - never hardcoded, since it varies per game
+    // (fixed vs. generated). Populated before first use by
+    // updateTopologyFromState().
+    let currentAdjacency = {};
+    let currentSupplyCenters = new Set();
+    let currentCoordinates = {};
+    let lastEdgeSignature = null;
+
+    function updateTopologyFromState(state) {
+      currentAdjacency = state.adjacency || {};
+      currentSupplyCenters = new Set(state.supply_centers || []);
+      currentCoordinates = (state.coordinates && Object.keys(state.coordinates).length)
+        ? state.coordinates
+        : TERRITORIES;
+    }
 
     function drawMapEdges() {
+      const signature = JSON.stringify(
+        Object.keys(currentAdjacency).sort().map((t) => [t, [...currentAdjacency[t]].sort()])
+      );
+      if (signature === lastEdgeSignature) return;
+      lastEdgeSignature = signature;
+
       const g = document.getElementById("mapEdgesLayer");
       const seen = new Set();
       let html = "";
-      for (const [terr, neighbors] of Object.entries(ADJACENCY)) {
+      for (const [terr, neighbors] of Object.entries(currentAdjacency)) {
         for (const neighbor of neighbors) {
           const key = [terr, neighbor].sort().join("|");
           if (seen.has(key)) continue;
           seen.add(key);
-          const a = TERRITORIES[terr];
-          const b = TERRITORIES[neighbor];
+          const a = currentCoordinates[terr];
+          const b = currentCoordinates[neighbor];
           if (!a || !b) continue;
           html += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" />`;
         }
       }
       g.innerHTML = html;
-      mapEdgesDrawn = true;
     }
 
     function renderMap(map) {
-      if (!mapEdgesDrawn) drawMapEdges();
+      drawMapEdges();
       const g = document.getElementById("mapNodesLayer");
-      g.innerHTML = Object.entries(TERRITORIES).map(([name, meta]) => {
+      g.innerHTML = Object.keys(map).map((name) => {
+        const meta = currentCoordinates[name];
+        if (!meta) return "";
         const tData = map[name] || {};
-        const isSC = SUPPLY_CENTERS.has(name);
+        const isSC = currentSupplyCenters.has(name);
         const scColor = tData.sc_owner ? COLORS[tData.sc_owner] : "#1e293b";
         const unitColor = tData.unit_faction ? COLORS[tData.unit_faction] : "transparent";
         const isMine = tData.unit_faction === myFaction;
@@ -362,7 +377,9 @@
 
     async function startPracticeMatch() {
       try {
-        const res = await fetch("/api/v1/practice", {
+        const wantsRandomMap = document.getElementById("randomMapToggle").checked;
+        const url = wantsRandomMap ? "/api/v1/practice?map_mode=generated" : "/api/v1/practice";
+        const res = await fetch(url, {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}` },
         });
@@ -458,6 +475,7 @@
       document.getElementById("phaseDisplay").textContent = state.phase;
       document.getElementById("timerDisplay").textContent = formatTimer(state.time_remaining_seconds);
 
+      updateTopologyFromState(state);
       renderMap(state.map);
 
       const myUnits = Object.entries(state.map)
@@ -555,7 +573,7 @@
         function renderExtra() {
           const action = actionSelect.value;
           if (action === "MOVE") {
-            const options = (ADJACENCY[terr] || [])
+            const options = (currentAdjacency[terr] || [])
               .map((dest) => `<option value="${dest}">${dest}</option>`)
               .join("");
             extra.innerHTML = `
@@ -579,7 +597,7 @@
             const destSelect = extra.querySelector(".support-dest-select");
             function renderSupportDest() {
               const src = sourceSelect.value;
-              const opts = [src, ...(ADJACENCY[src] || [])];
+              const opts = [src, ...(currentAdjacency[src] || [])];
               destSelect.innerHTML = opts.map((o) => `<option value="${o}">${o === src ? o + " (hold)" : o}</option>`).join("");
             }
             sourceSelect.addEventListener("change", renderSupportDest);
