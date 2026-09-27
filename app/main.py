@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from . import server_hub
 from .archetypes import MachiavellianTraitor, OpportunisticGreedy, PacifistTurtle, StochasticChaos
 from .db import (
+    delete_assigned_match,
     init_db,
     load_all_agent_states,
     load_all_assigned_matches,
@@ -345,6 +346,21 @@ async def rate_finished_game(game: GameSession) -> None:
             record.wins += 1
         await save_agent_state(agent_id, record.model_dump())
 
+async def release_finished_match_agents(game_id: str) -> None:
+    """Frees every agent matched into this now-FINISHED game so their next
+    POST /api/v1/queue/join actually queues them for a new match, instead of
+    join_queue() finding their stale assigned_matches entry and handing back
+    the same finished game_id/faction forever (the bug behind agents never
+    accumulating more than one match on the leaderboard)."""
+    stale_agent_ids = [
+        agent_id
+        for agent_id, m in server_hub.assigned_matches.items()
+        if m["game_id"] == game_id
+    ]
+    for agent_id in stale_agent_ids:
+        del server_hub.assigned_matches[agent_id]
+        await delete_assigned_match(agent_id)
+
 async def game_loop(game_id: str):
     while True:
         await asyncio.sleep(1)
@@ -359,6 +375,7 @@ async def game_loop(game_id: str):
                 await update_caster_script(game)
                 if game.phase == Phase.FINISHED:
                     await rate_finished_game(game)
+                    await release_finished_match_agents(game_id)
             await save_game_state(game_id, game.to_state())
 
 async def spawn_game(

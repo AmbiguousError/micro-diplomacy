@@ -126,3 +126,11 @@ async def load_all_assigned_matches() -> Dict[str, Dict[str, Any]]:
     async with async_session() as session:
         result = await session.execute(select(AssignedMatchRow))
         return {row.agent_id: row.state for row in result.scalars().all()}
+
+
+async def delete_assigned_match(agent_id: str) -> None:
+    async with async_session() as session:
+        record = await session.get(AssignedMatchRow, agent_id)
+        if record:
+            await session.delete(record)
+            await session.commit()
