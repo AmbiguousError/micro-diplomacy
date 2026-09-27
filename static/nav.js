@@ -47,7 +47,7 @@
       <svg id="mdNavIconClose" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
     </button>
   </div>
-  <div id="mdNavMobilePanel" class="lg:hidden hidden absolute left-0 right-0 top-12 bg-slate-950/95 backdrop-blur border-b border-slate-800 flex-col gap-1 px-4 pb-3 text-xs z-40">${mobileLinks}</div>
+  <div id="mdNavMobilePanel" class="lg:hidden hidden absolute left-0 right-0 top-12 bg-slate-950/95 backdrop-blur border-b border-slate-800 flex flex-col gap-1 px-4 pb-3 text-xs z-40">${mobileLinks}</div>
 </nav>`;
 
   document.currentScript.insertAdjacentHTML("afterend", navHTML);
@@ -60,7 +60,6 @@
   toggleBtn.addEventListener("click", () => {
     const willOpen = panel.classList.contains("hidden");
     panel.classList.toggle("hidden");
-    panel.classList.toggle("flex");
     iconOpen.classList.toggle("hidden");
     iconClose.classList.toggle("hidden");
     toggleBtn.setAttribute("aria-expanded", String(willOpen));
