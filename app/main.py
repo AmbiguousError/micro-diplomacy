@@ -635,7 +635,7 @@ async def submit_orders(game_id: str, payload: Dict[str, Any], agent_faction: st
                 )
 
     orders = payload.get("orders", [])
-    game.orders[agent_faction] = orders
+    game.orders[agent_faction] = [Order(**o) if isinstance(o, dict) else o for o in orders]
     await save_game_state(game_id, game.to_state())
     return {"status": "ACCEPTED", "turn": game.turn, "order_count": len(orders)}
 
