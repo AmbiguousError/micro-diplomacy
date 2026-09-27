@@ -245,7 +245,8 @@
         if (state.phase === 'ORDERS' && state.submitted_orders) {
           for (const [faction, orders] of Object.entries(state.submitted_orders || {})) {
             for (const order of orders) {
-              const orderText = `${order.territory}: ${order.action}${order.target ? ' → ' + order.target : ''}`;
+              const target = order.target_destination || order.target_faction || order.target_source;
+              const orderText = `${order.unit_territory}: ${order.action}${target ? ' → ' + target : ''}`;
               allActivity.push({ type: 'order', faction, text: orderText, turn: currentTurn });
             }
           }
