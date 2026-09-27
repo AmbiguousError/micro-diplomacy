@@ -17,10 +17,12 @@ class TournamentRunner:
         ollama_model: str = "mistral",
         prompts_file: str = "prompts.yaml",
         prompt_names: Optional[List[str]] = None,
+        base_url: str = "http://localhost:8000",
     ):
         self.num_bots = num_bots
         self.ollama_model = ollama_model
         self.prompts_file = prompts_file
+        self.base_url = base_url
         # Cycle through the given prompt variants across bots (e.g. 4 bots,
         # 2 names -> bots 1&3 get name[0], bots 2&4 get name[1]), so you can
         # A/B test prompts.yaml variants against each other in one tournament.
@@ -39,6 +41,7 @@ class TournamentRunner:
             "--model", self.ollama_model,
             "--prompts-file", self.prompts_file,
             "--prompt-name", prompt_name,
+            "--base-url", self.base_url,
         ]
         print(f"[TOURNAMENT] Spawning Bot {bot_num} (prompt: {prompt_name})...")
         process = subprocess.Popen(cmd)
@@ -106,6 +109,7 @@ if __name__ == "__main__":
         default="default",
         help="Comma-separated prompt variant names to cycle across bots, e.g. 'aggressive,cautious' for a 4-bot A/B test",
     )
+    parser.add_argument("--base-url", default="http://localhost:8000", help="Referee server URL to play against")
     args = parser.parse_args()
 
     runner = TournamentRunner(
@@ -113,6 +117,7 @@ if __name__ == "__main__":
         ollama_model=args.model,
         prompts_file=args.prompts_file,
         prompt_names=[n.strip() for n in args.prompt_names.split(",") if n.strip()],
+        base_url=args.base_url,
     )
 
     def signal_handler(sig, frame):
