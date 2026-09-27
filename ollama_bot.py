@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""
+Micro-Diplomacy Bot using Local Ollama
+Calls a local Ollama model each turn to decide orders (HOLD/MOVE) and,
+during the DIPLOMACY phase, an optional public message.
+"""
+
+import argparse
+import json
+import time
+import httpx
+from typing import Any, Dict, List, Optional
+
+
+class OllamaBot:
+    def __init__(
+        self,
+        base_url: str,
+        agent_name: str,
+        developer_handle: str,
+        ollama_model: str = "mistral",
+        ollama_url: str = "http://localhost:11434",
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.agent_name = agent_name
+        self.developer_handle = developer_handle
+        self.ollama_model = ollama_model
+        self.ollama_url = ollama_url.rstrip("/")
+
+        self.http = httpx.Client(timeout=120.0)
+        self.ollama_http = httpx.Client(timeout=60.0)
+        self.game_id: Optional[str] = None
+        self.faction: Optional[str] = None
+        self.last_orders_turn = 0
+        self.last_diplomacy_turn = 0
+
+    def register_agent(self) -> None:
+        print("[REGISTER] Registering bot...")
+        resp = self.http.post(
+            f"{self.base_url}/api/v1/agents/register",
+            json={
+                "agent_name": self.agent_name,
+                "developer_handle": self.developer_handle,
+                "model_identifier": f"ollama-{self.ollama_model}",
+            },
+        )
+        resp.raise_for_status()
+        record = resp.json()
+        self.http.headers["Authorization"] = f"Bearer {record['api_key']}"
+        print(f"[REGISTER] ✓ Registered as {record['agent_id']}")
+
+    def join_queue(self) -> None:
+        print("[QUEUE] Joining matchmaking queue...")
+        resp = self.http.post(f"{self.base_url}/api/v1/queue/join")
+        resp.raise_for_status()
+
+        while True:
+            resp = self.http.get(f"{self.base_url}/api/v1/queue/status")
+            resp.raise_for_status()
+            queue_status = resp.json()
+
+            if queue_status["status"] == "MATCH_FOUND":
+                self.game_id = queue_status["game_id"]
+                self.faction = queue_status["assigned_faction"]
+                print(f"[QUEUE] ✓ Matched! Playing {self.faction} in {self.game_id}")
+                break
+
+            pos = queue_status.get("queue_position", "?")
+            print(f"[QUEUE] Position {pos}... waiting")
+            time.sleep(2.0)
+
+    def get_game_state(self) -> Dict[str, Any]:
+        resp = self.http.get(f"{self.base_url}/api/v1/games/{self.game_id}/state")
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_owned_units(self, map_state: Dict[str, Any]) -> List[str]:
+        return [terr for terr, data in map_state.items() if data.get("unit_faction") == self.faction]
+
+    def submit_orders(self, orders: List[Dict[str, Any]]) -> None:
+        resp = self.http.post(
+            f"{self.base_url}/api/v1/games/{self.game_id}/orders",
+            json={"orders": orders}
+        )
+        resp.raise_for_status()
+        print(f"[{self.faction}] Orders: {len(orders)} order(s)")
+
+    def send_message(self, recipient: str, content: str) -> None:
+        resp = self.http.post(
+            f"{self.base_url}/api/v1/games/{self.game_id}/messages",
+            json={"recipient": recipient, "content": content},
+        )
+        resp.raise_for_status()
+        print(f"[{self.faction}] Message to {recipient}: {content}")
+
+    def call_ollama(self, prompt: str) -> str:
+        resp = self.ollama_http.post(
+            f"{self.ollama_url}/api/generate",
+            json={
+                "model": self.ollama_model,
+                "prompt": prompt,
+                "stream": False,
+                "format": "json",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["response"]
+
+    def decide_orders(self, state: Dict[str, Any]) -> List[Dict[str, Any]]:
+        my_units = self.get_owned_units(state["map"])
+        if not my_units:
+            return []
+
+        adjacency = state.get("adjacency", {})
+        prompt = f"""You are playing faction {self.faction} in a Diplomacy-style strategy game on an 8-territory map.
+
+Board adjacency (which territories connect to which):
+{json.dumps(adjacency, indent=2)}
+
+Supply centers (territories worth capturing): {state.get('supply_centers')}
+
+Current territory ownership and units (sc_owner/unit_faction per territory):
+{json.dumps(state['map'], indent=2)}
+
+Your units are at: {my_units}
+
+For EACH of your units, choose ONE order:
+- HOLD: stay in place and defend
+- MOVE: move to an adjacent territory (must be listed under that territory's adjacency)
+
+Respond with ONLY a JSON object in exactly this shape, no other text:
+{{"orders": [{{"unit_territory": "<territory>", "action": "HOLD"}}, {{"unit_territory": "<territory>", "action": "MOVE", "target_destination": "<adjacent territory>"}}]}}
+
+Include exactly one order for each of your units: {my_units}
+"""
+        orders: List[Dict[str, Any]] = []
+        try:
+            raw = self.call_ollama(prompt)
+            data = json.loads(raw)
+            orders = data.get("orders", [])
+        except Exception as e:
+            print(f"[LLM] order decision failed ({e}), defaulting to HOLD")
+
+        return self._validate_orders(orders, my_units, adjacency)
+
+    def _validate_orders(
+        self, orders: List[Dict[str, Any]], my_units: List[str], adjacency: Dict[str, List[str]]
+    ) -> List[Dict[str, Any]]:
+        valid: List[Dict[str, Any]] = []
+        seen = set()
+        for o in orders:
+            terr = o.get("unit_territory")
+            if terr not in my_units or terr in seen:
+                continue
+            if o.get("action") == "MOVE":
+                dest = o.get("target_destination")
+                if dest and dest in adjacency.get(terr, []):
+                    valid.append({"unit_territory": terr, "action": "MOVE", "target_destination": dest})
+                    seen.add(terr)
+                    continue
+            # Unknown/invalid action or bad MOVE target - fall back to HOLD.
+            valid.append({"unit_territory": terr, "action": "HOLD"})
+            seen.add(terr)
+
+        for u in my_units:
+            if u not in seen:
+                valid.append({"unit_territory": u, "action": "HOLD"})
+        return valid
+
+    def decide_message(self, state: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        prompt = f"""You are playing faction {self.faction} in a Diplomacy-style game, turn {state['turn']}, diplomacy phase.
+
+Current map ownership: {json.dumps(state['map'])}
+Scores (supply centers held): {json.dumps(state['scores'])}
+
+You may optionally send one short public message to the other players (a threat, alliance offer, or taunt), under 20 words.
+
+Respond with ONLY a JSON object, no other text:
+{{"send": true, "content": "<your message>"}} or {{"send": false}} if you have nothing to say.
+"""
+        try:
+            raw = self.call_ollama(prompt)
+            data = json.loads(raw)
+            if data.get("send") and data.get("content"):
+                return {"recipient": "PUBLIC", "content": str(data["content"])[:200]}
+        except Exception as e:
+            print(f"[LLM] message decision failed ({e})")
+        return None
+
+    def run(self) -> None:
+        self.register_agent()
+
+        while True:
+            self.join_queue()
+            print(f"\n[START] Game started for {self.faction} in {self.game_id}\n")
+
+            while True:
+                try:
+                    state = self.get_game_state()
+                    if state["phase"] == "FINISHED":
+                        print(f"\n[GAME OVER] Winner: {state.get('winner')}\n")
+                        break
+
+                    if state["phase"] == "DIPLOMACY" and self.last_diplomacy_turn < state["turn"]:
+                        msg = self.decide_message(state)
+                        if msg:
+                            self.send_message(msg["recipient"], msg["content"])
+                        self.last_diplomacy_turn = state["turn"]
+
+                    if state["phase"] == "ORDERS" and self.last_orders_turn < state["turn"]:
+                        print(f"[Turn {state['turn']}] ORDERS PHASE")
+                        orders = self.decide_orders(state)
+                        if orders:
+                            self.submit_orders(orders)
+                        self.last_orders_turn = state["turn"]
+
+                except Exception as e:
+                    print(f"[ERROR] {e}")
+
+                time.sleep(3.0)
+
+            print(f"[TOURNAMENT] Re-queueing...\n")
+            self.game_id = None
+            self.faction = None
+            self.last_orders_turn = 0
+            self.last_diplomacy_turn = 0
+            time.sleep(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--agent-name", default="OllamaBot")
+    parser.add_argument("--developer-handle", default="dev")
+    parser.add_argument("--model", default="mistral")
+    parser.add_argument("--base-url", default="http://localhost:8000")
+    parser.add_argument("--ollama-url", default="http://localhost:11434")
+
+    args = parser.parse_args()
+
+    bot = OllamaBot(
+        base_url=args.base_url,
+        agent_name=args.agent_name,
+        developer_handle=args.developer_handle,
+        ollama_model=args.model,
+        ollama_url=args.ollama_url,
+    )
+    bot.run()
