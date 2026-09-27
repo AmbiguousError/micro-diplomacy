@@ -7,9 +7,39 @@ during the DIPLOMACY phase, an optional public message.
 
 import argparse
 import json
+import string
 import time
 import httpx
+import yaml
 from typing import Any, Dict, List, Optional
+
+# Built-in fallback if --prompts-file is missing or doesn't contain the
+# requested variant, so the bot still runs without prompts.yaml present.
+DEFAULT_PROMPTS = {
+    "orders": """You are playing faction $faction in a Diplomacy-style strategy game on an 8-territory map.
+Your goal is to maximize the number of supply centers you control. You win by controlling 5, or having the most at turn 10.
+Staying in place (HOLD) never gains you a new supply center - only MOVEing onto an empty or enemy-held supply center can capture it.
+Prefer MOVEing onto an EMPTY supply center whenever one of your units is adjacent to one. Only HOLD if every adjacent territory is unfavorable.
+
+Your units and their real options this turn:
+$unit_briefs
+
+Respond with ONLY a JSON object in exactly this shape, no other text:
+{"orders": [{"unit_territory": "<territory>", "action": "HOLD"}, {"unit_territory": "<territory>", "action": "MOVE", "target_destination": "<adjacent territory>"}]}
+
+Include exactly one order for each of your units: $my_units
+""",
+    "message": """You are playing faction $faction in a Diplomacy-style game, turn $turn, diplomacy phase.
+
+Current map ownership: $map
+Scores (supply centers held): $scores
+
+You may optionally send one short public message to the other players (a threat, alliance offer, or taunt), under 20 words.
+
+Respond with ONLY a JSON object, no other text:
+{"send": true, "content": "<your message>"} or {"send": false} if you have nothing to say.
+""",
+}
 
 
 class OllamaBot:
@@ -20,12 +50,16 @@ class OllamaBot:
         developer_handle: str,
         ollama_model: str = "mistral",
         ollama_url: str = "http://localhost:11434",
+        prompts_file: Optional[str] = "prompts.yaml",
+        prompt_name: str = "default",
     ):
         self.base_url = base_url.rstrip("/")
         self.agent_name = agent_name
         self.developer_handle = developer_handle
         self.ollama_model = ollama_model
         self.ollama_url = ollama_url.rstrip("/")
+        self.prompt_name = prompt_name
+        self.prompts = self._load_prompts(prompts_file, prompt_name)
 
         self.http = httpx.Client(timeout=120.0)
         self.ollama_http = httpx.Client(timeout=60.0)
@@ -33,6 +67,26 @@ class OllamaBot:
         self.faction: Optional[str] = None
         self.last_orders_turn = 0
         self.last_diplomacy_turn = 0
+
+    def _load_prompts(self, prompts_file: Optional[str], prompt_name: str) -> Dict[str, str]:
+        prompts = dict(DEFAULT_PROMPTS)
+        if not prompts_file:
+            return prompts
+        try:
+            with open(prompts_file) as f:
+                data = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            print(f"[PROMPTS] {prompts_file} not found, using built-in defaults")
+            return prompts
+
+        variant = data.get(prompt_name)
+        if not variant:
+            print(f"[PROMPTS] '{prompt_name}' not found in {prompts_file}, using built-in defaults")
+            return prompts
+
+        prompts.update(variant)
+        print(f"[PROMPTS] Loaded '{prompt_name}' from {prompts_file}")
+        return prompts
 
     def register_agent(self) -> None:
         print("[REGISTER] Registering bot...")
@@ -132,19 +186,11 @@ class OllamaBot:
                     neighbor_notes.append(f"{n} (not a supply center)")
             unit_briefs.append(f"- Unit at {terr} can MOVE to: {'; '.join(neighbor_notes)}")
 
-        prompt = f"""You are playing faction {self.faction} in a Diplomacy-style strategy game on an 8-territory map.
-Your goal is to maximize the number of supply centers you control. You win by controlling 5, or having the most at turn 10.
-Staying in place (HOLD) never gains you a new supply center - only MOVEing onto an empty or enemy-held supply center can capture it.
-Prefer MOVEing onto an EMPTY supply center whenever one of your units is adjacent to one. Only HOLD if every adjacent territory is unfavorable (e.g. moving would abandon your own supply center for no gain, or an adjacent supply center is already yours).
-
-Your units and their real options this turn:
-{chr(10).join(unit_briefs)}
-
-Respond with ONLY a JSON object in exactly this shape, no other text:
-{{"orders": [{{"unit_territory": "<territory>", "action": "HOLD"}}, {{"unit_territory": "<territory>", "action": "MOVE", "target_destination": "<adjacent territory>"}}]}}
-
-Include exactly one order for each of your units: {my_units}
-"""
+        prompt = string.Template(self.prompts["orders"]).safe_substitute(
+            faction=self.faction,
+            unit_briefs="\n".join(unit_briefs),
+            my_units=my_units,
+        )
         orders: List[Dict[str, Any]] = []
         try:
             raw = self.call_ollama(prompt)
@@ -180,16 +226,12 @@ Include exactly one order for each of your units: {my_units}
         return valid
 
     def decide_message(self, state: Dict[str, Any]) -> Optional[Dict[str, str]]:
-        prompt = f"""You are playing faction {self.faction} in a Diplomacy-style game, turn {state['turn']}, diplomacy phase.
-
-Current map ownership: {json.dumps(state['map'])}
-Scores (supply centers held): {json.dumps(state['scores'])}
-
-You may optionally send one short public message to the other players (a threat, alliance offer, or taunt), under 20 words.
-
-Respond with ONLY a JSON object, no other text:
-{{"send": true, "content": "<your message>"}} or {{"send": false}} if you have nothing to say.
-"""
+        prompt = string.Template(self.prompts["message"]).safe_substitute(
+            faction=self.faction,
+            turn=state["turn"],
+            map=json.dumps(state["map"]),
+            scores=json.dumps(state["scores"]),
+        )
         try:
             raw = self.call_ollama(prompt)
             data = json.loads(raw)
@@ -246,6 +288,8 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="mistral")
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--ollama-url", default="http://localhost:11434")
+    parser.add_argument("--prompts-file", default="prompts.yaml", help="YAML file of named prompt variants")
+    parser.add_argument("--prompt-name", default="default", help="Which variant in --prompts-file to use")
 
     args = parser.parse_args()
 
@@ -255,5 +299,7 @@ if __name__ == "__main__":
         developer_handle=args.developer_handle,
         ollama_model=args.model,
         ollama_url=args.ollama_url,
+        prompts_file=args.prompts_file,
+        prompt_name=args.prompt_name,
     )
     bot.run()
