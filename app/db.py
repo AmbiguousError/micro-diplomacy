@@ -18,7 +18,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import JSON, DateTime, String, select, ForeignKey
+from sqlalchemy import JSON, DateTime, String, select, ForeignKey, asc
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -257,7 +257,7 @@ async def get_first_ladder_prompt_hash(game_id: str, agent_id: str) -> Optional[
                 (ComplianceLogRow.game_id == game_id) &
                 (ComplianceLogRow.agent_id == agent_id)
             )
-            .order_by(ComplianceLogRow.id.asc())
+            .order_by(asc(ComplianceLogRow.id))
             .limit(1)
         )
         row = result.scalar()

@@ -12,10 +12,14 @@ from . import server_hub
 from .archetypes import MachiavellianTraitor, OpportunisticGreedy, PacifistTurtle, StochasticChaos
 from .db import (
     delete_assigned_match,
+    get_active_season,
+    get_agent_season_hash,
+    get_first_ladder_prompt_hash,
     init_db,
     load_all_agent_states,
     load_all_assigned_matches,
     load_all_game_states,
+    log_compliance_check,
     save_agent_state,
     save_assigned_match,
     save_game_state,
@@ -587,8 +591,6 @@ def read_public_messages(game_id: str, since_turn: int = 1):
 
 @app.post("/api/v1/games/{game_id}/orders")
 async def submit_orders(game_id: str, payload: Dict[str, Any], agent_faction: str = Depends(get_authorized_faction)):
-    from .db import get_agent_season_hash, log_compliance_check, get_active_season
-
     game = games.get(game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
@@ -602,8 +604,6 @@ async def submit_orders(game_id: str, payload: Dict[str, Any], agent_faction: st
         agent_id = compliance.get("agent_id")
 
         if prompt_hash and agent_id:
-            from .db import get_first_ladder_prompt_hash
-
             season_id = await get_active_season()
             verified = False
 
