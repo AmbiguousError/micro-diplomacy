@@ -216,7 +216,8 @@
           html += `<circle cx="${pos.x}" cy="${pos.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
           html += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${tData.unit_faction[0]}</text>`;
         }
-        html += `<text x="${pos.x}" y="${pos.y + 32}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+        html += `<rect x="${pos.x - 35}" y="${pos.y + 44}" width="70" height="16" rx="3" fill="#0f172a" fill-opacity="0.8" />`;
+        html += `<text x="${pos.x}" y="${pos.y + 55}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
         html += `</g>`;
         return html;
       }).join('');
