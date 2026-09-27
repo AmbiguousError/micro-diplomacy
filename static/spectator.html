@@ -53,86 +53,60 @@
         </div>
       </header>
 
+      <!-- Turn Navigation Controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-bold text-slate-300">Browse Game History</span>
+          <span class="text-xs text-slate-500" id="viewingIndicator">Viewing Live</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="prevTurn()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition">
+            ← Previous
+          </button>
+          <input type="range" id="turnSlider" min="1" max="10" value="1" class="flex-1 h-2 bg-slate-800 rounded-lg cursor-pointer" oninput="jumpToTurn(this.value)">
+          <button onclick="nextTurn()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition">
+            Next →
+          </button>
+        </div>
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <span>Turn <span id="selectedTurn">1</span> of <span id="maxTurn">10</span></span>
+          <button onclick="goToLive()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded transition">
+            Go to Live
+          </button>
+        </div>
+      </div>
+
       <!-- Live Battle Map -->
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-2">Theater Map</h2>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Theater Map</h2>
+          <span id="mapNote" class="text-[10px] text-slate-500"></span>
+        </div>
         <svg viewBox="0 0 800 500" class="w-full h-64 drop-shadow-lg">
           <g id="mapEdgesLayer" stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"></g>
           <g id="mapNodesLayer"></g>
         </svg>
       </section>
 
-      <!-- DUAL-CASTER ESPORTS BROADCAST DESK COMPONENT -->
+      <!-- PUBLIC CHAT & GAME EVENTS FEED -->
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
 
-      <!-- Desk Header & Status -->
+      <!-- Header -->
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-3">
-          <span class="w-3 h-3 rounded-full bg-rose-500 animate-ping"></span>
+          <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
           <div>
-            <h3 class="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-2">
-              Broadcast Desk: <span class="bg-gradient-to-r from-amber-400 via-rose-400 to-indigo-400 bg-clip-text text-transparent">Live Analysis</span>
-            </h3>
-            <span class="text-[10px] text-slate-500 font-mono">Dual-Neural Stream Active</span>
+            <h3 class="text-sm font-black uppercase tracking-wider text-slate-100">Live Feed</h3>
+            <span class="text-[10px] text-slate-500 font-mono">Public Messages & Events</span>
           </div>
-        </div>
-
-        <!-- Audio Control -->
-        <div class="flex items-center gap-3">
-          <canvas id="dualCasterWaveCanvas" width="100" height="24" class="rounded bg-slate-950 border border-slate-800"></canvas>
-          <button id="btnToggleDualAudio" onclick="toggleDualCasterAudio()" class="px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30">
-            <span id="audioBtnIcon">🔊</span>
-            <span id="audioBtnText">Live Audio On</span>
-          </button>
         </div>
       </div>
 
-      <!-- Dual-Host Avatars & Live Speaking Indicators -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        <!-- Caster 1: Rex "Viper" Vance -->
-        <div id="cardCasterRex" class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3 transition-all duration-300">
-          <div class="relative">
-            <div id="avatarRexRing" class="w-12 h-12 rounded-full border-2 border-slate-700 bg-amber-950/40 flex items-center justify-center text-xl shadow-inner transition-all duration-300">
-              🎙️
-            </div>
-            <span id="badgeRexLive" class="hidden absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-amber-500 text-slate-950 font-black text-[9px] font-mono uppercase">
-              LIVE
-            </span>
-          </div>
-          <div class="flex-1">
-            <div class="flex items-center justify-between">
-              <span class="font-black text-xs text-amber-400 tracking-wide">REX "VIPER" VANCE</span>
-              <span class="text-[9px] font-mono text-slate-500 uppercase">Play-by-Play</span>
-            </div>
-            <div id="subtitlesRex" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300 max-h-20 overflow-y-auto">
-              <span class="text-slate-500">Waiting for commentary...</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Caster 2: Dr. Evelyn Cross -->
-        <div id="cardCasterEvelyn" class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-3 transition-all duration-300">
-          <div class="relative">
-            <div id="avatarEvelynRing" class="w-12 h-12 rounded-full border-2 border-slate-700 bg-indigo-950/40 flex items-center justify-center text-xl shadow-inner transition-all duration-300">
-              🧠
-            </div>
-            <span id="badgeEvelynLive" class="hidden absolute -bottom-1 -right-1 px-1.5 py-0.2 rounded bg-indigo-500 text-white font-black text-[9px] font-mono uppercase">
-              LIVE
-            </span>
-          </div>
-          <div class="flex-1">
-            <div class="flex items-center justify-between">
-              <span class="font-black text-xs text-indigo-400 tracking-wide">DR. EVELYN CROSS</span>
-              <span class="text-[9px] font-mono text-slate-500 uppercase">Strategy Analysis</span>
-            </div>
-            <div id="subtitlesEvelyn" class="text-xs text-slate-300 font-sans mt-1 italic min-h-[36px] transition-opacity duration-300 max-h-20 overflow-y-auto">
-              <span class="text-slate-500">Analyzing board state...</span>
-            </div>
-          </div>
-        </div>
-
+      <!-- Messages & Events -->
+      <div id="liveEventsFeed" class="space-y-2 max-h-64 overflow-y-auto">
+        <p class="text-slate-500 text-xs">Waiting for activity...</p>
       </div>
+
     </div>
 
       <!-- Exit Button -->
@@ -172,7 +146,7 @@
       }
 
       try {
-        const res = await fetch(`/api/v1/games/${gameId}`);
+        const res = await fetch(`/api/v1/games/${gameId}/state`);
         if (!res.ok) throw new Error('Game not found');
         watchingGameId = gameId;
         document.getElementById('spectatorJoinScreen').classList.add('hidden');
@@ -199,7 +173,7 @@
     async function pollGameState() {
       if (!watchingGameId) return;
       try {
-        const res = await fetch(`/api/v1/games/${watchingGameId}`);
+        const res = await fetch(`/api/v1/games/${watchingGameId}/state`);
         if (!res.ok) return;
         const state = await res.json();
 
@@ -207,8 +181,17 @@
         document.getElementById('phaseDisplay').textContent = state.phase;
         document.getElementById('timerDisplay').textContent = formatTime(state.time_remaining_seconds);
 
+        // Update max turn for navigation
+        maxTurn = state.turn;
+        if (isViewingLive) {
+          selectedTurn = state.turn;
+        }
+        updateTurnDisplay();
+
         renderMap(state);
-        updateCasterCommentary(state.caster_script);
+        if (isViewingLive) {
+          updateLiveFeed(watchingGameId, state.turn);
+        }
       } catch (err) {
         // transient network error - next tick will retry
       }
@@ -255,8 +238,8 @@
       const nodesLayer = document.getElementById('mapNodesLayer');
       nodesLayer.innerHTML = Object.entries(nodePositions).map(([name, pos]) => {
         const tData = map[name] || {};
-        const scColor = tData.owner ? COLORS[tData.owner] : '#1e293b';
-        const unitColor = tData.unit ? COLORS[tData.unit] : 'transparent';
+        const scColor = tData.sc_owner ? COLORS[tData.sc_owner] : '#1e293b';
+        const unitColor = tData.unit_faction ? COLORS[tData.unit_faction] : 'transparent';
         const isSC = (state.supply_centers || []).includes(name);
         const strokeColor = isSC ? '#f8fafc' : '#475569';
         const strokeW = isSC ? '2.5' : '1.5';
@@ -264,52 +247,195 @@
         let html = `<g id="node-${name}">`;
         html += `<circle cx="${pos.x}" cy="${pos.y}" r="38" fill="${scColor}" fill-opacity="0.25" stroke="${strokeColor}" stroke-width="${strokeW}" />`;
         if (isSC) html += `<text x="${pos.x}" y="${pos.y - 44}" text-anchor="middle" font-size="14" fill="#fbbf24">★</text>`;
-        if (tData.unit) {
+        if (tData.unit_faction) {
           html += `<circle cx="${pos.x}" cy="${pos.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
-          html += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${tData.unit[0]}</text>`;
+          html += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${tData.unit_faction[0]}</text>`;
         }
-        html += `<text x="${pos.x}" y="${pos.y + 32}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+        // Territory name with background for readability
+        html += `<rect x="${pos.x - 35}" y="${pos.y + 38}" width="70" height="16" rx="3" fill="#0f172a" fill-opacity="0.8" />`;
+        html += `<text x="${pos.x}" y="${pos.y + 49}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
         html += `</g>`;
         return html;
       }).join('');
     }
 
-    function updateCasterCommentary(casterScript) {
-      if (!Array.isArray(casterScript) || casterScript.length <= lastSeenCommentaryIndex + 1) return;
+    async function updateLiveFeed(gameId, currentTurn) {
+      try {
+        const feed = document.getElementById('liveEventsFeed');
 
-      for (let i = lastSeenCommentaryIndex + 1; i < casterScript.length; i++) {
-        const line = casterScript[i];
-        const isRex = i % 2 === 0;
-        const subtitleDiv = isRex ? document.getElementById('subtitlesRex') : document.getElementById('subtitlesEvelyn');
+        // Fetch game state for recent events
+        const stateRes = await fetch(`/api/v1/games/${gameId}/state`);
+        const state = stateRes.ok ? await stateRes.json() : {};
 
-        if (subtitleDiv) {
-          const p = document.createElement('div');
-          p.className = 'mb-1';
-          p.textContent = line;
-          subtitleDiv.appendChild(p);
-          subtitleDiv.scrollTop = subtitleDiv.scrollHeight;
+        // Fetch public messages
+        const messagesRes = await fetch(`/api/v1/games/${gameId}/public-messages`);
+        const messagesData = messagesRes.ok ? await messagesRes.json() : { messages: [] };
+
+        let feedHTML = '';
+
+        // Show recent events (this is where the action is!)
+        if (state.recent_events && state.recent_events.length > 0) {
+          feedHTML += `<div class="text-[10px] font-black text-amber-500 uppercase mt-2 mb-2 opacity-70">
+            ─── CURRENT TURN EVENTS ───
+          </div>`;
+          for (const event of state.recent_events) {
+            // Add faction colors to events
+            let coloredEvent = event;
+            const factionMap = {
+              'Red': { color: 'text-rose-400', name: '🔴 Red' },
+              'Blue': { color: 'text-indigo-400', name: '🔵 Blue' },
+              'Green': { color: 'text-emerald-400', name: '🟢 Green' },
+              'Yellow': { color: 'text-amber-400', name: '🟡 Yellow' }
+            };
+
+            for (const [faction, style] of Object.entries(factionMap)) {
+              const regex = new RegExp(`\\b${faction}\\b`, 'g');
+              coloredEvent = coloredEvent.replace(regex, `<span class="${style.color} font-bold">${style.name}</span>`);
+            }
+
+            feedHTML += `<div class="text-xs text-slate-300 border-l-2 border-amber-700 pl-3 py-0.5">
+              📋 ${coloredEvent}
+            </div>`;
+          }
         }
 
-        lastSeenCommentaryIndex = i;
+        // Show public messages grouped by turn
+        const publicMessages = (messagesData.messages || [])
+          .filter(m => m.recipient === 'PUBLIC');
+
+        if (publicMessages.length > 0) {
+          const byTurn = {};
+          for (const msg of publicMessages) {
+            const turn = msg.turn || 1;
+            if (!byTurn[turn]) byTurn[turn] = [];
+            byTurn[turn].push(msg);
+          }
+
+          const turns = Object.keys(byTurn).sort((a, b) => parseInt(a) - parseInt(b));
+
+          for (const turn of turns) {
+            feedHTML += `<div class="text-[10px] font-black text-indigo-500 uppercase mt-3 mb-2 opacity-60">
+              ─── TURN ${turn} CHAT ───
+            </div>`;
+
+            for (const msg of byTurn[turn]) {
+              const factionColor = {
+                'Red': 'text-rose-400',
+                'Blue': 'text-indigo-400',
+                'Green': 'text-emerald-400',
+                'Yellow': 'text-amber-400'
+              }[msg.sender] || 'text-slate-400';
+
+              feedHTML += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-0.5">
+                <span class="font-bold ${factionColor}">${msg.sender}</span>
+                <span class="text-slate-500">:</span>
+                <span class="text-slate-300"> ${msg.content}</span>
+              </div>`;
+            }
+          }
+        }
+
+        if (feedHTML === '') {
+          feedHTML = '<p class="text-slate-500 text-xs text-center py-4">Waiting for activity...</p>';
+        }
+
+        feed.innerHTML = feedHTML;
+        // Always scroll to bottom to show latest
+        feed.scrollTop = feed.scrollHeight;
+      } catch (err) {
+        console.error('Failed to update feed:', err);
       }
     }
 
-    function toggleDualCasterAudio() {
-      const icon = document.getElementById('audioBtnIcon');
-      const text = document.getElementById('audioBtnText');
-      const btn = document.getElementById('btnToggleDualAudio');
-      const isOn = icon.textContent === '🔊';
+    function formatEvent(event) {
+      let coloredEvent = event;
+      const factionMap = {
+        'Red': { color: 'text-rose-400', name: '🔴 Red' },
+        'Blue': { color: 'text-indigo-400', name: '🔵 Blue' },
+        'Green': { color: 'text-emerald-400', name: '🟢 Green' },
+        'Yellow': { color: 'text-amber-400', name: '🟡 Yellow' }
+      };
 
-      if (isOn) {
-        icon.textContent = '🔇';
-        text.textContent = 'Muted';
-        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-400 transition flex items-center gap-1.5";
+      for (const [faction, style] of Object.entries(factionMap)) {
+        const regex = new RegExp(`\\b${faction}\\b`, 'g');
+        coloredEvent = coloredEvent.replace(regex, `<span class="${style.color} font-bold">${style.name}</span>`);
+      }
+
+      return `<div class="text-xs text-slate-300 border-l-2 border-amber-700 pl-3 py-0.5">
+        📋 ${coloredEvent}
+      </div>`;
+    }
+
+    // Auto-load game if game ID is in URL query params
+    let selectedTurn = 1;
+    let maxTurn = 1;
+    let isViewingLive = true;
+
+    function updateTurnDisplay() {
+      document.getElementById('selectedTurn').textContent = selectedTurn;
+      document.getElementById('maxTurn').textContent = maxTurn;
+      document.getElementById('turnSlider').max = maxTurn;
+      document.getElementById('turnSlider').value = selectedTurn;
+
+      // Update map note
+      const mapNote = document.getElementById('mapNote');
+      if (isViewingLive) {
+        document.getElementById('viewingIndicator').textContent = 'Viewing Live';
+        document.getElementById('viewingIndicator').className = 'text-xs text-emerald-400 font-bold';
+        mapNote.textContent = '(Live)';
+        mapNote.className = 'text-[10px] text-emerald-500';
       } else {
-        icon.textContent = '🔊';
-        text.textContent = 'Live Audio On';
-        btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/30";
+        document.getElementById('viewingIndicator').textContent = `Viewing Turn ${selectedTurn}`;
+        document.getElementById('viewingIndicator').className = 'text-xs text-amber-400 font-bold';
+        if (selectedTurn === maxTurn) {
+          mapNote.textContent = '(Final State)';
+          mapNote.className = 'text-[10px] text-slate-400';
+        } else {
+          mapNote.textContent = '(Shows Final State - Map snapshots not available)';
+          mapNote.className = 'text-[10px] text-slate-500 italic';
+        }
+      }
+
+      // Re-render feed for selected turn
+      if (watchingGameId) {
+        updateLiveFeedForTurn(watchingGameId, selectedTurn);
       }
     }
+
+    function nextTurn() {
+      if (selectedTurn < maxTurn) {
+        selectedTurn++;
+        isViewingLive = false;
+        updateTurnDisplay();
+      }
+    }
+
+    function prevTurn() {
+      if (selectedTurn > 1) {
+        selectedTurn--;
+        updateTurnDisplay();
+      }
+    }
+
+    function jumpToTurn(turn) {
+      selectedTurn = parseInt(turn);
+      isViewingLive = false;
+      updateTurnDisplay();
+    }
+
+    function goToLive() {
+      isViewingLive = true;
+      selectedTurn = maxTurn;
+      updateTurnDisplay();
+    }
+    window.addEventListener('load', () => {
+      const params = new URLSearchParams(window.location.search);
+      const gameId = params.get('game');
+      if (gameId) {
+        document.getElementById('gameIdInput').value = gameId;
+        watchGame();
+      }
+    });
   </script>
 </body>
 </html>
