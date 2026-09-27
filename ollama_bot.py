@@ -137,7 +137,16 @@ class OllamaBot:
             json={"orders": orders}
         )
         resp.raise_for_status()
-        print(f"[{self.faction}] Orders: {len(orders)} order(s)")
+        order_strs = []
+        for o in orders:
+            unit = o.get("unit_territory", "?")
+            action = o.get("action", "?")
+            target = o.get("target_destination")
+            if target:
+                order_strs.append(f"{unit} {action} -> {target}")
+            else:
+                order_strs.append(f"{unit} {action}")
+        print(f"[{self.faction}] Orders ({len(orders)}): {'; '.join(order_strs)}")
 
     def send_message(self, recipient: str, content: str) -> None:
         resp = self.http.post(

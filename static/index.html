@@ -221,7 +221,7 @@
                 <div class="flex items-center gap-3">
                   <span class="text-slate-400 text-xs">${scoreParts}</span>
                   ${g.winner ? `<span class="text-indigo-400 font-bold text-xs">🏆 ${g.winner}</span>` : ""}
-                  <a href="/api/v1/games/${g.game_id}/state" class="text-indigo-400 hover:text-indigo-300 text-xs underline underline-offset-2">state ↗</a>
+                  <a href="/spectator.html?game=${g.game_id}" class="text-indigo-400 hover:text-indigo-300 text-xs font-semibold underline underline-offset-2">Watch ↗</a>
                 </div>
               </div>`;
           })
