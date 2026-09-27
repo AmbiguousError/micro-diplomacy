@@ -9,6 +9,7 @@ import time
 import sys
 import signal
 from typing import List, Optional
+import httpx
 
 class TournamentRunner:
     def __init__(
@@ -29,6 +30,17 @@ class TournamentRunner:
         self.prompt_names = prompt_names or ["default"]
         self.processes: List[subprocess.Popen] = []
         self.running = True
+
+    def clear_queue(self) -> None:
+        """Clear stale agents from server's matchmaking queue."""
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                resp = client.post(f"{self.base_url}/api/v1/queue/clear")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    print(f"[TOURNAMENT] Queue cleared ({data.get('agents_removed', 0)} stale agents removed)\n")
+        except Exception as e:
+            print(f"[TOURNAMENT] Warning: queue clear failed ({e}), continuing...\n")
 
     def spawn_bot(self, bot_num: int) -> subprocess.Popen:
         """Spawn a single bot process."""
@@ -57,11 +69,7 @@ class TournamentRunner:
         print(f"Press Ctrl+C to stop all bots\n")
 
         # Clear any stale agents in the queue from previous runs
-        try:
-            resp = self.make_request("POST", "/queue/clear")
-            print(f"[TOURNAMENT] Cleared stale agents from queue\n")
-        except Exception as e:
-            print(f"[TOURNAMENT] Note: queue clear not available ({e})\n")
+        self.clear_queue()
 
         # Spawn initial bots
         for i in range(1, self.num_bots + 1):
