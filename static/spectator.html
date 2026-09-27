@@ -21,12 +21,6 @@
           <input type="text" id="gameIdInput" placeholder="e.g. game_1001" maxlength="32"
                  class="w-full bg-slate-950 border border-slate-700 text-sm rounded-lg px-4 py-2.5 text-white outline-none focus:border-indigo-500 transition mb-3" autocomplete="off">
           <p id="joinError" class="text-rose-400 text-xs mb-3 hidden"></p>
-
-          <label class="flex items-center gap-2 mb-4 cursor-pointer">
-            <input type="checkbox" id="blindModeToggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
-            <span class="text-xs text-slate-400">🔲 Blind Mode <span class="text-slate-500">(hide treaties & orders)</span></span>
-          </label>
-
           <button id="joinBtn" onclick="watchGame()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20">
             Watch Game
           </button>
@@ -127,14 +121,6 @@
         </div>
       </section>
 
-      <!-- TREATIES -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4">Active Treaties</h2>
-        <div id="treatiesDisplay" class="space-y-2 max-h-64 overflow-y-auto">
-          <p class="text-slate-500 text-xs">No treaties yet...</p>
-        </div>
-      </section>
-
       <!-- PUBLIC CHAT & GAME EVENTS FEED -->
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
 
@@ -169,7 +155,6 @@
     let watchingGameId = null;
     let pollIntervalId = null;
     let lastSeenCommentaryIndex = -1;
-    let blindMode = false;  // Hide treaties, orders, private DMs in blind mode
 
     const COLORS = {
       Red: '#ef4444', Blue: '#3b82f6', Green: '#10b981', Yellow: '#f59e0b', Neutral: '#475569'
@@ -198,28 +183,10 @@
         const res = await fetch(`/api/v1/games/${gameId}/state`);
         if (!res.ok) throw new Error('Game not found');
 
-        // Check blind mode toggle
-        blindMode = document.getElementById('blindModeToggle')?.checked || false;
-
         watchingGameId = gameId;
         document.getElementById('spectatorJoinScreen').classList.add('hidden');
         document.getElementById('spectatorView').classList.remove('hidden');
         document.getElementById('watchGameIdLabel').textContent = gameId;
-
-        // Show blind mode indicator
-        if (blindMode) {
-          const header = document.querySelector('header');
-          const existingBadge = header.querySelector('[data-blind-badge]');
-          if (!existingBadge) {
-            const badge = document.createElement('div');
-            badge.setAttribute('data-blind-badge', 'true');
-            badge.className = 'text-xs font-black px-3 py-1 rounded-lg bg-slate-700 text-slate-300 uppercase tracking-wider';
-            badge.textContent = '🔲 Blind Mode (No Treaty Info)';
-            header.appendChild(badge);
-          }
-          // Hide treaties section
-          document.getElementById('treatiesDisplay').closest('section').style.display = 'none';
-        }
 
         lastSeenCommentaryIndex = -1;
         pollGameState();
@@ -252,7 +219,6 @@
 
         renderMap(state);
         updateScoreboard(state);
-        updateTreaties(watchingGameId);
         updateLiveFeed(watchingGameId, state.turn);
       } catch (err) {
         // transient network error - next tick will retry
@@ -346,69 +312,6 @@
       document.getElementById('scoreBlue').textContent = scores.Blue || 0;
       document.getElementById('scoreGreen').textContent = scores.Green || 0;
       document.getElementById('scoreYellow').textContent = scores.Yellow || 0;
-    }
-
-    async function updateTreaties(gameId) {
-      const display = document.getElementById('treatiesDisplay');
-
-      // In blind mode, don't fetch or display treaties
-      if (blindMode) {
-        display.innerHTML = '<p class="text-slate-500 text-xs italic">[Hidden in Blind Mode]</p>';
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/v1/games/${gameId}/public-treaties`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const treaties = data.treaties || [];
-
-        if (treaties.length === 0) {
-          display.innerHTML = '<p class="text-slate-500 text-xs">No treaties yet...</p>';
-          return;
-        }
-
-        let html = '';
-        for (const t of treaties) {
-          const statusColor = {
-            'PENDING': 'text-amber-400',
-            'ACTIVE': 'text-emerald-400',
-            'FULFILLED': 'text-slate-400',
-            'BREACHED': 'text-rose-400'
-          }[t.status] || 'text-slate-400';
-
-          const initiatorColor = {
-            'Red': 'text-rose-400',
-            'Blue': 'text-indigo-400',
-            'Green': 'text-emerald-400',
-            'Yellow': 'text-amber-400'
-          }[t.initiator] || 'text-slate-400';
-
-          const signatoryColor = {
-            'Red': 'text-rose-400',
-            'Blue': 'text-indigo-400',
-            'Green': 'text-emerald-400',
-            'Yellow': 'text-amber-400'
-          }[t.signatory] || 'text-slate-400';
-
-          html += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-2">
-            <div class="flex gap-2 items-center mb-1">
-              <span class="font-bold ${initiatorColor}">${t.initiator}</span>
-              <span class="text-slate-500">←→</span>
-              <span class="font-bold ${signatoryColor}">${t.signatory}</span>
-              <span class="text-slate-500">${t.treaty_type}</span>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${statusColor}">${t.status}</span>
-            </div>
-            <div class="text-slate-400 text-[10px]">
-              Territories: ${t.target_territories.join(', ')} | ${t.duration_turns} turns
-            </div>
-          </div>`;
-        }
-
-        display.innerHTML = html || '<p class="text-slate-500 text-xs">No treaties yet...</p>';
-      } catch (err) {
-        // silently fail - treaties endpoint may not exist
-      }
     }
 
     async function updateLiveFeed(gameId, currentTurn) {
