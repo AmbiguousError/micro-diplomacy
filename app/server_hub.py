@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from .db import (
     save_agent_state, save_assigned_match, create_season, lock_season,
     get_active_season, register_agent_for_season, get_agent_season_hash,
-    log_compliance_check
+    log_compliance_check, get_first_ladder_prompt_hash
 )
 from .mcts import FACTIONS
 
@@ -257,13 +257,25 @@ async def verify_prompt(
     request: PromptVerificationRequest,
     agent: AgentRecord = Depends(authenticate_agent)
 ) -> Dict[str, Any]:
-    """Agent: Verify prompt hash matches registered hash for current season."""
+    """Agent: Verify prompt hash matches registered hash for current season.
+
+    If no active season exists, this is a ladder game - allow by default.
+    Season games require strict compliance; ladder games are lenient."""
     if agent.agent_id != agent_id:
         raise HTTPException(status_code=403, detail="Cannot verify another agent")
 
     season_id = await get_active_season()
+
+    # Ladder game mode: no active season means no compliance requirement
     if not season_id:
-        raise HTTPException(status_code=400, detail="No active season")
+        await log_compliance_check(
+            game_id="ladder",
+            turn=0,
+            agent_id=agent_id,
+            prompt_hash=request.prompt_hash,
+            verified=True,
+        )
+        return {"status": "verified", "agent_id": agent_id, "season_id": None, "mode": "ladder"}
 
     registered_hash = await get_agent_season_hash(agent_id, season_id)
     if not registered_hash:
@@ -281,7 +293,7 @@ async def verify_prompt(
     if not verified:
         raise HTTPException(status_code=403, detail="Prompt hash mismatch - registered and runtime hashes do not match")
 
-    return {"status": "verified", "agent_id": agent_id, "season_id": season_id}
+    return {"status": "verified", "agent_id": agent_id, "season_id": season_id, "mode": "season"}
 
 
 class TurnTimeoutManager:

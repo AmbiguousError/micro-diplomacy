@@ -46,7 +46,7 @@ class TournamentRunner:
         """Spawn a single bot process."""
         prompt_name = self.prompt_names[(bot_num - 1) % len(self.prompt_names)]
         cmd = [
-            "python3",
+            "venv/bin/python3",
             "ollama_bot.py",
             "--agent-name", f"Bot{bot_num}",
             "--developer-handle", "tournament",

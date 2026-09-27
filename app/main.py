@@ -595,29 +595,44 @@ async def submit_orders(game_id: str, payload: Dict[str, Any], agent_faction: st
     if game.phase != Phase.ORDERS:
         raise HTTPException(status_code=400, detail="Orders only accepted during ORDERS phase")
 
-    # Verify prompt hash if provided (season compliance)
+    # Verify prompt hash if provided (season compliance or ladder consistency)
     compliance = payload.get("_compliance", {})
     if compliance:
         prompt_hash = compliance.get("prompt_hash")
         agent_id = compliance.get("agent_id")
 
         if prompt_hash and agent_id:
+            from .db import get_first_ladder_prompt_hash
+
             season_id = await get_active_season()
+            verified = False
+
             if season_id:
+                # Season game: verify against registered hash
                 registered_hash = await get_agent_season_hash(agent_id, season_id)
                 verified = (registered_hash and prompt_hash == registered_hash)
-                await log_compliance_check(
-                    game_id=game_id,
-                    turn=game.turn,
-                    agent_id=agent_id,
-                    prompt_hash=prompt_hash,
-                    verified=verified,
+            else:
+                # Ladder game: verify against first-provided hash for this agent/game
+                first_hash = await get_first_ladder_prompt_hash(game_id, agent_id)
+                if first_hash:
+                    verified = (prompt_hash == first_hash)
+                else:
+                    # First submission - accept it as the reference
+                    verified = True
+
+            await log_compliance_check(
+                game_id=game_id,
+                turn=game.turn,
+                agent_id=agent_id,
+                prompt_hash=prompt_hash,
+                verified=verified,
+            )
+
+            if not verified:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Prompt hash verification failed - your prompt does not match your registered prompt"
                 )
-                if not verified:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Prompt hash verification failed - your registered prompt does not match your runtime prompt"
-                    )
 
     orders = payload.get("orders", [])
     game.orders[agent_faction] = orders

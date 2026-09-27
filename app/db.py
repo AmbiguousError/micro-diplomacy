@@ -16,7 +16,7 @@ backend if needed.
 """
 import os
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy import JSON, DateTime, String, select, ForeignKey
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -243,3 +243,22 @@ async def log_compliance_check(game_id: str, turn: int, agent_id: str, prompt_ha
             )
         )
         await session.commit()
+
+
+async def get_first_ladder_prompt_hash(game_id: str, agent_id: str) -> Optional[str]:
+    """Get the first prompt hash submitted by an agent in a ladder game.
+
+    Ladder games don't have formal season registration, so we track the
+    first-provided hash per agent/game and require consistency thereafter."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(ComplianceLogRow.prompt_hash)
+            .where(
+                (ComplianceLogRow.game_id == game_id) &
+                (ComplianceLogRow.agent_id == agent_id)
+            )
+            .order_by(ComplianceLogRow.id.asc())
+            .limit(1)
+        )
+        row = result.scalar()
+        return row
