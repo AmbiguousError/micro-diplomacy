@@ -5,6 +5,24 @@ cold (human or AI). `TODO.md` has the detailed, verified-line-by-line record
 of every fix; this is the short version plus what to know before you touch
 anything.
 
+## Latest session (2026-09-27)
+
+Completed **all 3 QoL gaps** and added onboarding infrastructure:
+
+**Frontend QoL (3 gaps closed):**
+1. **SPY Orders UI** (`player.html`) - added "SPY" as 4th action type in command deck; polls `/api/v1/games/{id}/intel` to display intercepted enemy orders/messages in tabbed "Intel" panel alongside "Messages"
+2. **Live Game Spectator** (`spectator.html`) - transformed from static preview into fully functional viewer: game ID selector, polls state every 1s, renders live battle map (supports both fixed & generated maps), displays real caster commentary from server's `caster_script` array on dual-host broadcast desk (Rex Viper + Dr. Evelyn)
+3. **Espionage Intel Display** - intercepted intel from successful SPY operations now shows in player.html with observed moves and private messages captured; badge counts total intel packets gathered
+
+**Onboarding/Documentation:**
+- **`build.html`** - new primary entry point for building agents: pick LLM foundation (OpenAI/Claude/Ollama/custom API), get personalized API key setup, copy-paste agent code templates for each model, starter prompt scaffold; prominently linked from index.html
+- **MIT LICENSE** - open-source ready
+- **Comprehensive README** - quick-start guide with live site link, features, dev setup
+- **Prompt Playground expansion** - sandbox simulation extended from 3 turns to full 10-turn narrative arc showing strategy evolution, diplomacy/betrayal dynamics, victory condition, post-game TrueSkill impact
+- **`prompts.yaml` removed from repo** - moved into playground.html's default preset UI; folded cleanly with no loss of content
+
+**Live status:** All 8 commits deployed to `https://diplomacy.nzdataconsulting.co.nz` and verified responding.
+
 ## Repo state right now
 
 - Git repo (`main` branch), **working tree clean, everything committed and
@@ -69,14 +87,22 @@ anything.
   `playground.html`'s hardcoded lines, which are wrong (missing Eastgate's
   real connections, plus a fabricated Centerlands↔Duneport edge) - worth
   remembering if `playground.html`'s map is ever used as a reference again.
-- **Espionage (`SPY` orders) is wired.** A unit given `SPY` forfeits its
+- **`spectator.html` (live game viewer) is now fully wired.** Enter any game ID
+  to watch live: polls game state every 1s, displays turn/phase/timer, renders
+  live battle map (handles both fixed and generated topologies), and shows
+  real caster commentary from the server's generated `caster_script` on a
+  dual-host broadcast desk (Rex Viper play-by-play, Dr. Evelyn strategy).
+  A "Stop Watching" button returns to game selector.
+- **Espionage (`SPY` orders) is fully wired.** A unit given `SPY` forfeits its
   move (defends like a `HOLD`, can't attack) in exchange for that turn's
   real `MOVE` orders and any intercepted private DMs involving
   `target_faction` - delivered privately via `GET .../intel`, never the
-  public `GET .../state`. No frontend for it yet (same as treaties - see
-  the gaps list). `app/intel_matrix.py`'s separate belief-state/credibility
-  system is still unwired - see gap #1 below, it needs a real fog-of-war
-  concept that doesn't exist yet.
+  public `GET .../state`. **Frontend now complete:** `player.html` has SPY
+  action in order dropdown + tabbed Intel panel showing all intercepted
+  operations (observed moves, captured messages), with badge counting total
+  intel packets gathered this game. `app/intel_matrix.py`'s separate
+  belief-state/credibility system is still unwired - see gap #1 below, it
+  needs a real fog-of-war concept that doesn't exist yet.
 - **Generated maps are wired.** `?map_mode=generated` on `POST /api/v1/games`
   or `POST /api/v1/practice` (default stays `"fixed"`, so nothing existing
   changed behavior) spins up a game on a randomized planar graph
@@ -177,6 +203,8 @@ anything.
    and `app/dual_caster.py`'s synthesis path isn't wired to Piper yet
    either, so fetching them alone wouldn't enable anything. Tackle this
    together with actually wiring Piper synthesis.
+   
+**Completed this session:** SPY order UI, intercepted intel display, live spectator with caster commentary - all 3 QoL gaps from the previous handover are now closed.
 
 (`PROJECT_HANDOFF.md`'s file index and `static/docs.html)`'s stray
 filename `)` are both fixed now - nothing cosmetic left outstanding.)
