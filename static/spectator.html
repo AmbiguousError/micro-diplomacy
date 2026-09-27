@@ -62,6 +62,37 @@
         </svg>
       </section>
 
+      <!-- SCOREBOARD: Supply Centers Held -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4">Scoreboard</h2>
+        <div id="scoreboardDisplay" class="grid grid-cols-4 gap-3">
+          <div class="text-center p-3 bg-slate-800 rounded-lg">
+            <div class="text-xs text-slate-500 font-bold uppercase">Red</div>
+            <div class="text-2xl font-black text-rose-400" id="scoreRed">0</div>
+          </div>
+          <div class="text-center p-3 bg-slate-800 rounded-lg">
+            <div class="text-xs text-slate-500 font-bold uppercase">Blue</div>
+            <div class="text-2xl font-black text-indigo-400" id="scoreBlue">0</div>
+          </div>
+          <div class="text-center p-3 bg-slate-800 rounded-lg">
+            <div class="text-xs text-slate-500 font-bold uppercase">Green</div>
+            <div class="text-2xl font-black text-emerald-400" id="scoreGreen">0</div>
+          </div>
+          <div class="text-center p-3 bg-slate-800 rounded-lg">
+            <div class="text-xs text-slate-500 font-bold uppercase">Yellow</div>
+            <div class="text-2xl font-black text-amber-400" id="scoreYellow">0</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TREATIES -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4">Active Treaties</h2>
+        <div id="treatiesDisplay" class="space-y-2 max-h-64 overflow-y-auto">
+          <p class="text-slate-500 text-xs">No treaties yet...</p>
+        </div>
+      </section>
+
       <!-- PUBLIC CHAT & GAME EVENTS FEED -->
       <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
 
@@ -156,6 +187,8 @@
         document.getElementById('timerDisplay').textContent = formatTime(state.time_remaining_seconds);
 
         renderMap(state);
+        updateScoreboard(state);
+        updateTreaties(watchingGameId);
         updateLiveFeed(watchingGameId, state.turn);
       } catch (err) {
         // transient network error - next tick will retry
@@ -221,6 +254,70 @@
         html += `</g>`;
         return html;
       }).join('');
+    }
+
+    function updateScoreboard(state) {
+      const scores = state.scores || {};
+      document.getElementById('scoreRed').textContent = scores.Red || 0;
+      document.getElementById('scoreBlue').textContent = scores.Blue || 0;
+      document.getElementById('scoreGreen').textContent = scores.Green || 0;
+      document.getElementById('scoreYellow').textContent = scores.Yellow || 0;
+    }
+
+    async function updateTreaties(gameId) {
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}/public-treaties`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const treaties = data.treaties || [];
+
+        const display = document.getElementById('treatiesDisplay');
+        if (treaties.length === 0) {
+          display.innerHTML = '<p class="text-slate-500 text-xs">No treaties yet...</p>';
+          return;
+        }
+
+        let html = '';
+        for (const t of treaties) {
+          const statusColor = {
+            'PENDING': 'text-amber-400',
+            'ACTIVE': 'text-emerald-400',
+            'FULFILLED': 'text-slate-400',
+            'BREACHED': 'text-rose-400'
+          }[t.status] || 'text-slate-400';
+
+          const initiatorColor = {
+            'Red': 'text-rose-400',
+            'Blue': 'text-indigo-400',
+            'Green': 'text-emerald-400',
+            'Yellow': 'text-amber-400'
+          }[t.initiator] || 'text-slate-400';
+
+          const signatoryColor = {
+            'Red': 'text-rose-400',
+            'Blue': 'text-indigo-400',
+            'Green': 'text-emerald-400',
+            'Yellow': 'text-amber-400'
+          }[t.signatory] || 'text-slate-400';
+
+          html += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-2">
+            <div class="flex gap-2 items-center mb-1">
+              <span class="font-bold ${initiatorColor}">${t.initiator}</span>
+              <span class="text-slate-500">←→</span>
+              <span class="font-bold ${signatoryColor}">${t.signatory}</span>
+              <span class="text-slate-500">${t.treaty_type}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded ${statusColor}">${t.status}</span>
+            </div>
+            <div class="text-slate-400 text-[10px]">
+              Territories: ${t.target_territories.join(', ')} | ${t.duration_turns} turns
+            </div>
+          </div>`;
+        }
+
+        display.innerHTML = html || '<p class="text-slate-500 text-xs">No treaties yet...</p>';
+      } catch (err) {
+        // silently fail - treaties endpoint may not exist
+      }
     }
 
     async function updateLiveFeed(gameId, currentTurn) {

@@ -20,12 +20,15 @@ DEFAULT_PROMPTS = {
 Your goal is to maximize the number of supply centers you control. You win by controlling 5, or having the most at turn 10.
 Staying in place (HOLD) never gains you a new supply center - only MOVEing onto an empty or enemy-held supply center can capture it.
 Prefer MOVEing onto an EMPTY supply center whenever one of your units is adjacent to one. Only HOLD if every adjacent territory is unfavorable.
+You may also spend a unit's turn on SPY instead of HOLD/MOVE: it still defends its own territory, but reveals that faction's real MOVE orders and private DMs for this turn only.
 
 Your units and their real options this turn:
 $unit_briefs
 
+Rival factions you could SPY on: $enemy_factions
+
 Respond with ONLY a JSON object in exactly this shape, no other text:
-{"orders": [{"unit_territory": "<territory>", "action": "HOLD"}, {"unit_territory": "<territory>", "action": "MOVE", "target_destination": "<adjacent territory>"}]}
+{"orders": [{"unit_territory": "<territory>", "action": "HOLD"}, {"unit_territory": "<territory>", "action": "MOVE", "target_destination": "<adjacent territory>"}, {"unit_territory": "<territory>", "action": "SPY", "target_faction": "<rival faction>"}]}
 
 Include exactly one order for each of your units: $my_units
 """,
@@ -36,8 +39,12 @@ Scores (supply centers held): $scores
 
 You may optionally send one short public message to the other players (a threat, alliance offer, or taunt), under 20 words.
 
+You can also propose a formal treaty with another faction (NON_AGGRESSION, DMZ, or SUPPORT_PROMISE over specific territories), and/or sign a pending treaty someone has proposed to you:
+Treaties awaiting your signature: $pending_treaties
+
 Respond with ONLY a JSON object, no other text:
-{"send": true, "content": "<your message>"} or {"send": false} if you have nothing to say.
+{"send": true, "content": "<your message>", "propose_treaty": {"signatory": "<rival faction>", "treaty_type": "NON_AGGRESSION", "target_territories": ["<territory>"], "duration_turns": 5}, "sign_treaty_id": "<treaty_id>"}
+Omit "propose_treaty" and/or "sign_treaty_id" entirely if you have none to offer or sign this turn. Use {"send": false} for the message portion if you have nothing to say.
 """,
 }
 
@@ -141,7 +148,7 @@ class OllamaBot:
         for o in orders:
             unit = o.get("unit_territory", "?")
             action = o.get("action", "?")
-            target = o.get("target_destination")
+            target = o.get("target_destination") or o.get("target_faction")
             if target:
                 order_strs.append(f"{unit} {action} -> {target}")
             else:
@@ -155,6 +162,35 @@ class OllamaBot:
         )
         resp.raise_for_status()
         print(f"[{self.faction}] Message to {recipient}: {content}")
+
+    def get_pending_treaties(self) -> List[Dict[str, Any]]:
+        resp = self.http.get(f"{self.base_url}/api/v1/games/{self.game_id}/treaties")
+        resp.raise_for_status()
+        treaties = resp.json().get("treaties", [])
+        return [t for t in treaties if t["signatory"] == self.faction and t["status"] == "PENDING"]
+
+    def propose_treaty(self, signatory: str, treaty_type: str, target_territories: List[str], duration_turns: int) -> None:
+        resp = self.http.post(
+            f"{self.base_url}/api/v1/games/{self.game_id}/treaties",
+            json={
+                "signatory": signatory,
+                "treaty_type": treaty_type,
+                "target_territories": target_territories,
+                "duration_turns": duration_turns,
+            },
+        )
+        if resp.status_code >= 400:
+            print(f"[{self.faction}] Treaty proposal rejected ({resp.status_code}): {resp.text}")
+            return
+        treaty = resp.json()
+        print(f"[{self.faction}] Proposed {treaty_type} treaty {treaty['treaty_id']} to {signatory} over {target_territories}")
+
+    def sign_treaty(self, treaty_id: str) -> None:
+        resp = self.http.post(f"{self.base_url}/api/v1/games/{self.game_id}/treaties/{treaty_id}/sign")
+        if resp.status_code >= 400:
+            print(f"[{self.faction}] Treaty sign rejected ({resp.status_code}): {resp.text}")
+            return
+        print(f"[{self.faction}] Signed treaty {treaty_id}")
 
     def call_ollama(self, prompt: str) -> str:
         resp = self.ollama_http.post(
@@ -195,10 +231,12 @@ class OllamaBot:
                     neighbor_notes.append(f"{n} (not a supply center)")
             unit_briefs.append(f"- Unit at {terr} can MOVE to: {'; '.join(neighbor_notes)}")
 
+        enemy_factions = [f for f in ("Red", "Blue", "Green", "Yellow") if f != self.faction]
         prompt = string.Template(self.prompts["orders"]).safe_substitute(
             faction=self.faction,
             unit_briefs="\n".join(unit_briefs),
             my_units=my_units,
+            enemy_factions=", ".join(enemy_factions),
         )
         orders: List[Dict[str, Any]] = []
         try:
@@ -225,7 +263,13 @@ class OllamaBot:
                     valid.append({"unit_territory": terr, "action": "MOVE", "target_destination": dest})
                     seen.add(terr)
                     continue
-            # Unknown/invalid action or bad MOVE target - fall back to HOLD.
+            if o.get("action") == "SPY":
+                target = o.get("target_faction")
+                if target and target != self.faction and target in ("Red", "Blue", "Green", "Yellow"):
+                    valid.append({"unit_territory": terr, "action": "SPY", "target_faction": target})
+                    seen.add(terr)
+                    continue
+            # Unknown/invalid action or bad MOVE/SPY target - fall back to HOLD.
             valid.append({"unit_territory": terr, "action": "HOLD"})
             seen.add(terr)
 
@@ -235,19 +279,48 @@ class OllamaBot:
         return valid
 
     def decide_message(self, state: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        pending_treaties = self.get_pending_treaties()
+        pending_summary = "; ".join(
+            f"{t['treaty_id']} from {t['initiator']}: {t['treaty_type']} over {t['target_territories']} "
+            f"for {t['duration_turns']} turns"
+            for t in pending_treaties
+        ) or "none"
+
         prompt = string.Template(self.prompts["message"]).safe_substitute(
             faction=self.faction,
             turn=state["turn"],
             map=json.dumps(state["map"]),
             scores=json.dumps(state["scores"]),
+            pending_treaties=pending_summary,
         )
         try:
             raw = self.call_ollama(prompt)
             data = json.loads(raw)
-            if data.get("send") and data.get("content"):
-                return {"recipient": "PUBLIC", "content": str(data["content"])[:200]}
         except Exception as e:
             print(f"[LLM] message decision failed ({e})")
+            return None
+
+        proposal = data.get("propose_treaty")
+        if isinstance(proposal, dict) and proposal.get("signatory") in ("Red", "Blue", "Green", "Yellow") and proposal["signatory"] != self.faction:
+            try:
+                self.propose_treaty(
+                    signatory=proposal["signatory"],
+                    treaty_type=str(proposal.get("treaty_type", "NON_AGGRESSION")),
+                    target_territories=list(proposal.get("target_territories", [])),
+                    duration_turns=int(proposal.get("duration_turns", 5)),
+                )
+            except Exception as e:
+                print(f"[{self.faction}] Treaty proposal failed: {e}")
+
+        sign_id = data.get("sign_treaty_id")
+        if sign_id and any(t["treaty_id"] == sign_id for t in pending_treaties):
+            try:
+                self.sign_treaty(sign_id)
+            except Exception as e:
+                print(f"[{self.faction}] Treaty sign failed: {e}")
+
+        if data.get("send") and data.get("content"):
+            return {"recipient": "PUBLIC", "content": str(data["content"])[:200]}
         return None
 
     def run(self) -> None:

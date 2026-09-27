@@ -679,6 +679,15 @@ def list_treaties(game_id: str, agent_faction: str = Depends(get_authorized_fact
     ]
     return {"treaties": visible}
 
+@app.get("/api/v1/games/{game_id}/public-treaties")
+def read_public_treaties(game_id: str):
+    """Spectator-facing endpoint: every treaty regardless of party, terms
+    included, no auth needed (mirrors read_public_messages)."""
+    game = games.get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+    return {"treaties": [_treaty_to_dict(t) for t in game.treaty_engine.active_treaties.values()]}
+
 # Mounted last so it only catches paths none of the /api/v1/... routes above
 # matched - e.g. GET /spectator.html or / (index.html). Root-mounted (not
 # under /static) to match streamer.sh's hardcoded
