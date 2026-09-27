@@ -100,17 +100,28 @@
       <section class="flex flex-col gap-4 h-[70vh]">
         <div class="bg-slate-900 border border-slate-800 rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl">
 
-          <!-- Chat Header -->
+          <!-- Chat Header with Tabs -->
           <div class="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
-            <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Encrypted Comms Link</h2>
+            <div class="flex items-center gap-4">
+              <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Encrypted Comms Link</h2>
+              <div class="flex gap-2">
+                <button id="tabMessages" onclick="switchCommTab('messages')" class="tab-button active text-xs font-bold px-3 py-1 rounded bg-slate-800 text-slate-300 transition">Messages</button>
+                <button id="tabIntel" onclick="switchCommTab('intel')" class="tab-button text-xs font-bold px-3 py-1 rounded bg-slate-900 text-slate-500 transition">Intel <span id="intelBadge" class="hidden bg-rose-600 text-white text-[9px] rounded-full w-5 h-5 flex items-center justify-center ml-1">0</span></button>
+              </div>
+            </div>
             <span class="flex items-center gap-2 text-xs font-mono text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> Live
             </span>
           </div>
 
-          <!-- Chat History -->
-          <div class="flex-1 p-4 overflow-y-auto chat-scroll space-y-4" id="chatHistory">
+          <!-- Messages Tab -->
+          <div id="messagesPanel" class="flex-1 p-4 overflow-y-auto chat-scroll space-y-4">
             <div class="text-xs text-slate-500 italic text-center">-- Secure Channel Established --</div>
+          </div>
+
+          <!-- Intel Tab -->
+          <div id="intelPanel" class="hidden flex-1 p-4 overflow-y-auto chat-scroll space-y-3">
+            <div class="text-xs text-slate-500 italic text-center">No intercepted intel yet...</div>
           </div>
 
           <!-- Message Input -->
@@ -267,9 +278,11 @@
     let gameId = null;
     let myFaction = null;
     let seenMessageIds = new Set();
+    let seenIntelPackets = new Set();
     let lastOrdersFormTurn = null;
     let queuePollHandle = null;
     let statePollHandle = null;
+    let currentCommTab = "messages";
 
     function showJoinForm(errorText) {
       document.getElementById("joinScreen").classList.remove("hidden");
@@ -306,9 +319,14 @@
       // only unique within a single game), and old chat/finished-banner
       // state would still be showing.
       seenMessageIds = new Set();
+      seenIntelPackets = new Set();
       lastOrdersFormTurn = null;
-      document.getElementById("chatHistory").innerHTML =
+      currentCommTab = "messages";
+      document.getElementById("messagesPanel").innerHTML =
         '<div class="text-xs text-slate-500 italic text-center">-- Secure Channel Established --</div>';
+      document.getElementById("intelPanel").innerHTML =
+        '<div class="text-xs text-slate-500 italic text-center">No intercepted intel yet...</div>';
+      document.getElementById("intelBadge").classList.add("hidden");
       document.getElementById("finishedBanner").classList.add("hidden");
       document.getElementById("practiceAgainBtn").classList.add("hidden");
       document.getElementById("botOpponentsLabel").classList.add("hidden");
@@ -465,6 +483,7 @@
         const state = await res.json();
         renderState(state);
         await pollMessages();
+        await pollIntel();
       } catch (err) {
         // transient network error - next tick will retry
       }
@@ -668,7 +687,7 @@
     // ---- Messages ----
 
     function appendMessage(sender, recipient, content) {
-      const chat = document.getElementById("chatHistory");
+      const chat = document.getElementById("messagesPanel");
       const msgDiv = document.createElement("div");
       const isMe = sender === myFaction;
 
@@ -726,6 +745,105 @@
     document.getElementById("messageInput").addEventListener("keypress", function (e) {
       if (e.key === "Enter") sendMessage();
     });
+
+    // ---- Intel ----
+
+    function switchCommTab(tab) {
+      currentCommTab = tab;
+      const messagesPanel = document.getElementById("messagesPanel");
+      const intelPanel = document.getElementById("intelPanel");
+      const tabMessages = document.getElementById("tabMessages");
+      const tabIntel = document.getElementById("tabIntel");
+
+      if (tab === "messages") {
+        messagesPanel.classList.remove("hidden");
+        intelPanel.classList.add("hidden");
+        tabMessages.classList.replace("bg-slate-900", "bg-slate-800");
+        tabMessages.classList.replace("text-slate-500", "text-slate-300");
+        tabIntel.classList.replace("bg-slate-800", "bg-slate-900");
+        tabIntel.classList.replace("text-slate-300", "text-slate-500");
+      } else {
+        messagesPanel.classList.add("hidden");
+        intelPanel.classList.remove("hidden");
+        tabMessages.classList.replace("bg-slate-800", "bg-slate-900");
+        tabMessages.classList.replace("text-slate-300", "text-slate-500");
+        tabIntel.classList.replace("bg-slate-900", "bg-slate-800");
+        tabIntel.classList.replace("text-slate-500", "text-slate-300");
+      }
+    }
+
+    async function pollIntel() {
+      try {
+        const res = await fetch(`/api/v1/games/${gameId}/intel`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        let newIntelCount = 0;
+        for (const packet of data.intel) {
+          const packetId = `${packet.turn}-${packet.source_territory}-${packet.target_faction}`;
+          if (!seenIntelPackets.has(packetId)) {
+            seenIntelPackets.add(packetId);
+            appendIntel(packet);
+            newIntelCount++;
+          }
+        }
+        if (newIntelCount > 0) {
+          const badge = document.getElementById("intelBadge");
+          badge.textContent = seenIntelPackets.size;
+          badge.classList.remove("hidden");
+        }
+      } catch (err) {
+        // transient network error - next tick will retry
+      }
+    }
+
+    function appendIntel(packet) {
+      const intelPanel = document.getElementById("intelPanel");
+      if (intelPanel.querySelector(".text-slate-500.italic")) {
+        intelPanel.innerHTML = "";
+      }
+
+      const intelDiv = document.createElement("div");
+      intelDiv.className = "bg-slate-800 border border-rose-900/50 rounded-lg p-3 space-y-2";
+
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between";
+      header.innerHTML = `
+        <span class="text-xs font-bold text-rose-400">🕵️ INTEL: Turn ${packet.turn}</span>
+        <span class="text-[9px] font-mono text-slate-500">${packet.source_territory} vs ${packet.target_faction}</span>
+      `;
+      intelDiv.appendChild(header);
+
+      if (packet.observed_movements && packet.observed_movements.length > 0) {
+        const movDiv = document.createElement("div");
+        movDiv.className = "text-xs text-slate-300";
+        movDiv.innerHTML = `<span class="text-rose-300 font-bold">📋 Observed Moves:</span>`;
+        for (const move of packet.observed_movements) {
+          const moveItem = document.createElement("div");
+          moveItem.className = "text-[10px] text-slate-400 ml-3 mt-1";
+          moveItem.textContent = move;
+          movDiv.appendChild(moveItem);
+        }
+        intelDiv.appendChild(movDiv);
+      }
+
+      if (packet.intercepted_messages && packet.intercepted_messages.length > 0) {
+        const msgDiv = document.createElement("div");
+        msgDiv.className = "text-xs text-slate-300";
+        msgDiv.innerHTML = `<span class="text-rose-300 font-bold">💬 Intercepted Messages:</span>`;
+        for (const msg of packet.intercepted_messages) {
+          const msgItem = document.createElement("div");
+          msgItem.className = "text-[10px] text-slate-400 ml-3 mt-1 italic";
+          msgItem.textContent = `"${msg}"`;
+          msgDiv.appendChild(msgItem);
+        }
+        intelDiv.appendChild(msgDiv);
+      }
+
+      intelPanel.appendChild(intelDiv);
+      intelPanel.scrollTop = intelPanel.scrollHeight;
+    }
 
     // ---- Boot ----
     if (apiKey && agentId) {
