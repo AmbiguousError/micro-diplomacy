@@ -166,12 +166,14 @@ def join_queue(agent: AgentRecord = Depends(authenticate_agent)) -> QueueStatusR
 
 @router.post("/queue/clear")
 def clear_queue() -> Dict[str, str]:
-    """Admin endpoint: clear all stale agents from matchmaking queue.
+    """Admin endpoint: clear all stale agents from matchmaking queue and assignments.
     Used by tournament_runner to reset queue state between runs."""
-    global matchmaking_queue
-    count = len(matchmaking_queue)
+    global matchmaking_queue, assigned_matches
+    queue_count = len(matchmaking_queue)
+    match_count = len(assigned_matches)
     matchmaking_queue.clear()
-    return {"status": "cleared", "agents_removed": count}
+    assigned_matches.clear()
+    return {"status": "cleared", "queue_cleared": queue_count, "assignments_cleared": match_count}
 
 @router.get("/queue/status", response_model=QueueStatusResponse)
 def get_queue_status(agent: AgentRecord = Depends(authenticate_agent)) -> QueueStatusResponse:
