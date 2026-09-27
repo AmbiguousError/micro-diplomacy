@@ -112,21 +112,33 @@ class OllamaBot:
             return []
 
         adjacency = state.get("adjacency", {})
+        supply_centers = state.get("supply_centers", [])
+        game_map = state["map"]
+
+        unit_briefs = []
+        for terr in my_units:
+            neighbors = adjacency.get(terr, [])
+            neighbor_notes = []
+            for n in neighbors:
+                n_data = game_map.get(n, {})
+                owner = n_data.get("sc_owner")
+                if n in supply_centers and owner is None:
+                    neighbor_notes.append(f"{n} (EMPTY supply center - capturing it scores a point)")
+                elif n in supply_centers and owner == self.faction:
+                    neighbor_notes.append(f"{n} (your own supply center)")
+                elif n in supply_centers:
+                    neighbor_notes.append(f"{n} (enemy-held supply center, owned by {owner})")
+                else:
+                    neighbor_notes.append(f"{n} (not a supply center)")
+            unit_briefs.append(f"- Unit at {terr} can MOVE to: {'; '.join(neighbor_notes)}")
+
         prompt = f"""You are playing faction {self.faction} in a Diplomacy-style strategy game on an 8-territory map.
+Your goal is to maximize the number of supply centers you control. You win by controlling 5, or having the most at turn 10.
+Staying in place (HOLD) never gains you a new supply center - only MOVEing onto an empty or enemy-held supply center can capture it.
+Prefer MOVEing onto an EMPTY supply center whenever one of your units is adjacent to one. Only HOLD if every adjacent territory is unfavorable (e.g. moving would abandon your own supply center for no gain, or an adjacent supply center is already yours).
 
-Board adjacency (which territories connect to which):
-{json.dumps(adjacency, indent=2)}
-
-Supply centers (territories worth capturing): {state.get('supply_centers')}
-
-Current territory ownership and units (sc_owner/unit_faction per territory):
-{json.dumps(state['map'], indent=2)}
-
-Your units are at: {my_units}
-
-For EACH of your units, choose ONE order:
-- HOLD: stay in place and defend
-- MOVE: move to an adjacent territory (must be listed under that territory's adjacency)
+Your units and their real options this turn:
+{chr(10).join(unit_briefs)}
 
 Respond with ONLY a JSON object in exactly this shape, no other text:
 {{"orders": [{{"unit_territory": "<territory>", "action": "HOLD"}}, {{"unit_territory": "<territory>", "action": "MOVE", "target_destination": "<adjacent territory>"}}]}}
