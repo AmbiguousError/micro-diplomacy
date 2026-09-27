@@ -53,35 +53,9 @@
         </div>
       </header>
 
-      <!-- Turn Navigation Controls -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-bold text-slate-300">Browse Game History</span>
-          <span class="text-xs text-slate-500" id="viewingIndicator">Viewing Live</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <button onclick="prevTurn()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition">
-            ← Previous
-          </button>
-          <input type="range" id="turnSlider" min="1" max="10" value="1" class="flex-1 h-2 bg-slate-800 rounded-lg cursor-pointer" oninput="jumpToTurn(this.value)">
-          <button onclick="nextTurn()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold rounded-lg transition">
-            Next →
-          </button>
-        </div>
-        <div class="flex items-center justify-between text-xs text-slate-400">
-          <span>Turn <span id="selectedTurn">1</span> of <span id="maxTurn">10</span></span>
-          <button onclick="goToLive()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded transition">
-            Go to Live
-          </button>
-        </div>
-      </div>
-
       <!-- Live Battle Map -->
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Theater Map</h2>
-          <span id="mapNote" class="text-[10px] text-slate-500"></span>
-        </div>
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-2">Theater Map</h2>
         <svg viewBox="0 0 800 500" class="w-full h-64 drop-shadow-lg">
           <g id="mapEdgesLayer" stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"></g>
           <g id="mapNodesLayer"></g>
@@ -181,17 +155,8 @@
         document.getElementById('phaseDisplay').textContent = state.phase;
         document.getElementById('timerDisplay').textContent = formatTime(state.time_remaining_seconds);
 
-        // Update max turn for navigation
-        maxTurn = state.turn;
-        if (isViewingLive) {
-          selectedTurn = state.turn;
-        }
-        updateTurnDisplay();
-
         renderMap(state);
-        if (isViewingLive) {
-          updateLiveFeed(watchingGameId, state.turn);
-        }
+        updateLiveFeed(watchingGameId, state.turn);
       } catch (err) {
         // transient network error - next tick will retry
       }
@@ -251,9 +216,7 @@
           html += `<circle cx="${pos.x}" cy="${pos.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
           html += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${tData.unit_faction[0]}</text>`;
         }
-        // Territory name with background for readability
-        html += `<rect x="${pos.x - 35}" y="${pos.y + 38}" width="70" height="16" rx="3" fill="#0f172a" fill-opacity="0.8" />`;
-        html += `<text x="${pos.x}" y="${pos.y + 49}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+        html += `<text x="${pos.x}" y="${pos.y + 32}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
         html += `</g>`;
         return html;
       }).join('');
@@ -263,80 +226,66 @@
       try {
         const feed = document.getElementById('liveEventsFeed');
 
-        // Fetch game state for recent events
+        // Fetch public messages and events
+        const messagesRes = await fetch(`/api/v1/games/${gameId}/messages`);
+        const messagesData = messagesRes.ok ? await messagesRes.json() : { messages: [] };
+
         const stateRes = await fetch(`/api/v1/games/${gameId}/state`);
         const state = stateRes.ok ? await stateRes.json() : {};
 
-        // Fetch public messages
-        const messagesRes = await fetch(`/api/v1/games/${gameId}/public-messages`);
-        const messagesData = messagesRes.ok ? await messagesRes.json() : { messages: [] };
+        // Combine all activity with timestamps
+        const allActivity = [];
 
-        let feedHTML = '';
+        // Add events
+        for (const event of state.recent_events || []) {
+          allActivity.push({ type: 'event', text: event, turn: currentTurn });
+        }
 
-        // Show recent events (this is where the action is!)
-        if (state.recent_events && state.recent_events.length > 0) {
-          feedHTML += `<div class="text-[10px] font-black text-amber-500 uppercase mt-2 mb-2 opacity-70">
-            ─── CURRENT TURN EVENTS ───
-          </div>`;
-          for (const event of state.recent_events) {
-            // Add faction colors to events
-            let coloredEvent = event;
-            const factionMap = {
-              'Red': { color: 'text-rose-400', name: '🔴 Red' },
-              'Blue': { color: 'text-indigo-400', name: '🔵 Blue' },
-              'Green': { color: 'text-emerald-400', name: '🟢 Green' },
-              'Yellow': { color: 'text-amber-400', name: '🟡 Yellow' }
-            };
-
-            for (const [faction, style] of Object.entries(factionMap)) {
-              const regex = new RegExp(`\\b${faction}\\b`, 'g');
-              coloredEvent = coloredEvent.replace(regex, `<span class="${style.color} font-bold">${style.name}</span>`);
-            }
-
-            feedHTML += `<div class="text-xs text-slate-300 border-l-2 border-amber-700 pl-3 py-0.5">
-              📋 ${coloredEvent}
-            </div>`;
+        // Add public messages
+        for (const msg of messagesData.messages || []) {
+          if (msg.recipient === 'PUBLIC') {
+            allActivity.push({ type: 'message', sender: msg.sender, text: msg.content, turn: msg.turn });
           }
         }
 
-        // Show public messages grouped by turn
-        const publicMessages = (messagesData.messages || [])
-          .filter(m => m.recipient === 'PUBLIC');
+        // Sort by turn (newer last)
+        allActivity.sort((a, b) => a.turn - b.turn);
 
-        if (publicMessages.length > 0) {
-          const byTurn = {};
-          for (const msg of publicMessages) {
-            const turn = msg.turn || 1;
-            if (!byTurn[turn]) byTurn[turn] = [];
-            byTurn[turn].push(msg);
+        // Build HTML with turn dividers
+        let feedHTML = '';
+        let lastTurn = -1;
+
+        for (const item of allActivity.slice(-50)) {
+          // Add turn divider if turn changed
+          if (item.turn !== lastTurn) {
+            feedHTML += `<div class="text-[10px] font-black text-indigo-500 uppercase mt-2 mb-1 opacity-60">
+              ─── Turn ${item.turn} ───
+            </div>`;
+            lastTurn = item.turn;
           }
 
-          const turns = Object.keys(byTurn).sort((a, b) => parseInt(a) - parseInt(b));
-
-          for (const turn of turns) {
-            feedHTML += `<div class="text-[10px] font-black text-indigo-500 uppercase mt-3 mb-2 opacity-60">
-              ─── TURN ${turn} CHAT ───
+          if (item.type === 'event') {
+            feedHTML += `<div class="text-xs text-slate-400 border-l-2 border-slate-700 pl-3 py-0.5">
+              📋 ${item.text}
             </div>`;
+          } else {
+            const factionColor = {
+              'Red': 'text-rose-400',
+              'Blue': 'text-indigo-400',
+              'Green': 'text-emerald-400',
+              'Yellow': 'text-amber-400'
+            }[item.sender] || 'text-slate-400';
 
-            for (const msg of byTurn[turn]) {
-              const factionColor = {
-                'Red': 'text-rose-400',
-                'Blue': 'text-indigo-400',
-                'Green': 'text-emerald-400',
-                'Yellow': 'text-amber-400'
-              }[msg.sender] || 'text-slate-400';
-
-              feedHTML += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-0.5">
-                <span class="font-bold ${factionColor}">${msg.sender}</span>
-                <span class="text-slate-500">:</span>
-                <span class="text-slate-300"> ${msg.content}</span>
-              </div>`;
-            }
+            feedHTML += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-0.5">
+              <span class="font-bold ${factionColor}">${item.sender}</span>
+              <span class="text-slate-500">:</span>
+              <span class="text-slate-300"> ${item.text}</span>
+            </div>`;
           }
         }
 
         if (feedHTML === '') {
-          feedHTML = '<p class="text-slate-500 text-xs text-center py-4">Waiting for activity...</p>';
+          feedHTML = '<p class="text-slate-500 text-xs">No activity yet...</p>';
         }
 
         feed.innerHTML = feedHTML;
@@ -347,87 +296,7 @@
       }
     }
 
-    function formatEvent(event) {
-      let coloredEvent = event;
-      const factionMap = {
-        'Red': { color: 'text-rose-400', name: '🔴 Red' },
-        'Blue': { color: 'text-indigo-400', name: '🔵 Blue' },
-        'Green': { color: 'text-emerald-400', name: '🟢 Green' },
-        'Yellow': { color: 'text-amber-400', name: '🟡 Yellow' }
-      };
-
-      for (const [faction, style] of Object.entries(factionMap)) {
-        const regex = new RegExp(`\\b${faction}\\b`, 'g');
-        coloredEvent = coloredEvent.replace(regex, `<span class="${style.color} font-bold">${style.name}</span>`);
-      }
-
-      return `<div class="text-xs text-slate-300 border-l-2 border-amber-700 pl-3 py-0.5">
-        📋 ${coloredEvent}
-      </div>`;
-    }
-
     // Auto-load game if game ID is in URL query params
-    let selectedTurn = 1;
-    let maxTurn = 1;
-    let isViewingLive = true;
-
-    function updateTurnDisplay() {
-      document.getElementById('selectedTurn').textContent = selectedTurn;
-      document.getElementById('maxTurn').textContent = maxTurn;
-      document.getElementById('turnSlider').max = maxTurn;
-      document.getElementById('turnSlider').value = selectedTurn;
-
-      // Update map note
-      const mapNote = document.getElementById('mapNote');
-      if (isViewingLive) {
-        document.getElementById('viewingIndicator').textContent = 'Viewing Live';
-        document.getElementById('viewingIndicator').className = 'text-xs text-emerald-400 font-bold';
-        mapNote.textContent = '(Live)';
-        mapNote.className = 'text-[10px] text-emerald-500';
-      } else {
-        document.getElementById('viewingIndicator').textContent = `Viewing Turn ${selectedTurn}`;
-        document.getElementById('viewingIndicator').className = 'text-xs text-amber-400 font-bold';
-        if (selectedTurn === maxTurn) {
-          mapNote.textContent = '(Final State)';
-          mapNote.className = 'text-[10px] text-slate-400';
-        } else {
-          mapNote.textContent = '(Shows Final State - Map snapshots not available)';
-          mapNote.className = 'text-[10px] text-slate-500 italic';
-        }
-      }
-
-      // Re-render feed for selected turn
-      if (watchingGameId) {
-        updateLiveFeedForTurn(watchingGameId, selectedTurn);
-      }
-    }
-
-    function nextTurn() {
-      if (selectedTurn < maxTurn) {
-        selectedTurn++;
-        isViewingLive = false;
-        updateTurnDisplay();
-      }
-    }
-
-    function prevTurn() {
-      if (selectedTurn > 1) {
-        selectedTurn--;
-        updateTurnDisplay();
-      }
-    }
-
-    function jumpToTurn(turn) {
-      selectedTurn = parseInt(turn);
-      isViewingLive = false;
-      updateTurnDisplay();
-    }
-
-    function goToLive() {
-      isViewingLive = true;
-      selectedTurn = maxTurn;
-      updateTurnDisplay();
-    }
     window.addEventListener('load', () => {
       const params = new URLSearchParams(window.location.search);
       const gameId = params.get('game');
