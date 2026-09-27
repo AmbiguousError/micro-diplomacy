@@ -62,7 +62,8 @@ class TournamentRunner:
             self.processes.append(proc)
             time.sleep(1)  # Stagger startup
 
-        print(f"[TOURNAMENT] All {self.num_bots} bots spawned. Monitoring...\n")
+        print(f"[TOURNAMENT] All {self.num_bots} bots spawned. Waiting for registration...\n")
+        time.sleep(5)  # Give all bots time to register + queue before matchmaker fires
 
         # Monitor and respawn dead processes
         try:
