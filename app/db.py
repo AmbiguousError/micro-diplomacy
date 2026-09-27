@@ -18,7 +18,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from sqlalchemy import JSON, DateTime, String, select
+from sqlalchemy import JSON, DateTime, String, select, ForeignKey
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -65,6 +65,47 @@ class AssignedMatchRow(Base):
     agent_id: Mapped[str] = mapped_column(String, primary_key=True)
     state: Mapped[Dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class SeasonRow(Base):
+    """Tournament season: tracks registration deadlines and prompt locking."""
+    __tablename__ = "seasons"
+
+    season_id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String)  # "draft", "active", "locked"
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    locked_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+
+class AgentSeasonRow(Base):
+    """Agent registration for a season: stores prompt hash at registration time."""
+    __tablename__ = "agent_seasons"
+
+    agent_id: Mapped[str] = mapped_column(String, primary_key=True)
+    season_id: Mapped[str] = mapped_column(String, primary_key=True)
+    prompt_name: Mapped[str] = mapped_column(String)  # e.g. "machiavelli"
+    prompt_hash: Mapped[str] = mapped_column(String)  # sha256 of prompt text
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class ComplianceLogRow(Base):
+    """Audit trail: logs every prompt hash verification attempt."""
+    __tablename__ = "compliance_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    game_id: Mapped[str] = mapped_column(String)
+    turn: Mapped[int] = mapped_column(default=1)
+    agent_id: Mapped[str] = mapped_column(String)
+    prompt_hash: Mapped[str] = mapped_column(String)
+    verified: Mapped[bool] = mapped_column(default=False)
+    timestamp: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
 
@@ -134,3 +175,71 @@ async def delete_assigned_match(agent_id: str) -> None:
         if record:
             await session.delete(record)
             await session.commit()
+
+
+# Season Management
+async def create_season(season_id: str, name: str) -> None:
+    async with async_session() as session:
+        session.add(SeasonRow(season_id=season_id, name=name, status="active"))
+        await session.commit()
+
+
+async def lock_season(season_id: str) -> None:
+    async with async_session() as session:
+        record = await session.get(SeasonRow, season_id)
+        if record:
+            record.status = "locked"
+            record.locked_at = datetime.now(timezone.utc)
+            await session.commit()
+
+
+async def get_active_season() -> str:
+    """Returns the current active season_id."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(SeasonRow).where(SeasonRow.status == "active")
+        )
+        row = result.scalars().first()
+        return row.season_id if row else None
+
+
+# Agent-Season Registration
+async def register_agent_for_season(agent_id: str, season_id: str, prompt_name: str, prompt_hash: str) -> None:
+    async with async_session() as session:
+        session.add(
+            AgentSeasonRow(
+                agent_id=agent_id,
+                season_id=season_id,
+                prompt_name=prompt_name,
+                prompt_hash=prompt_hash,
+            )
+        )
+        await session.commit()
+
+
+async def get_agent_season_hash(agent_id: str, season_id: str) -> str:
+    """Returns registered prompt hash for agent in season, or None."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(AgentSeasonRow).where(
+                (AgentSeasonRow.agent_id == agent_id)
+                & (AgentSeasonRow.season_id == season_id)
+            )
+        )
+        row = result.scalars().first()
+        return row.prompt_hash if row else None
+
+
+# Compliance Logging
+async def log_compliance_check(game_id: str, turn: int, agent_id: str, prompt_hash: str, verified: bool) -> None:
+    async with async_session() as session:
+        session.add(
+            ComplianceLogRow(
+                game_id=game_id,
+                turn=turn,
+                agent_id=agent_id,
+                prompt_hash=prompt_hash,
+                verified=verified,
+            )
+        )
+        await session.commit()

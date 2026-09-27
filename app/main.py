@@ -586,12 +586,38 @@ def read_public_messages(game_id: str, since_turn: int = 1):
     return {"messages": public_messages}
 
 @app.post("/api/v1/games/{game_id}/orders")
-async def submit_orders(game_id: str, payload: Dict[str, List[Order]], agent_faction: str = Depends(get_authorized_faction)):
+async def submit_orders(game_id: str, payload: Dict[str, Any], agent_faction: str = Depends(get_authorized_faction)):
+    from .db import get_agent_season_hash, log_compliance_check, get_active_season
+
     game = games.get(game_id)
     if not game:
         raise HTTPException(status_code=404, detail="Game not found")
     if game.phase != Phase.ORDERS:
         raise HTTPException(status_code=400, detail="Orders only accepted during ORDERS phase")
+
+    # Verify prompt hash if provided (season compliance)
+    compliance = payload.get("_compliance", {})
+    if compliance:
+        prompt_hash = compliance.get("prompt_hash")
+        agent_id = compliance.get("agent_id")
+
+        if prompt_hash and agent_id:
+            season_id = await get_active_season()
+            if season_id:
+                registered_hash = await get_agent_season_hash(agent_id, season_id)
+                verified = (registered_hash and prompt_hash == registered_hash)
+                await log_compliance_check(
+                    game_id=game_id,
+                    turn=game.turn,
+                    agent_id=agent_id,
+                    prompt_hash=prompt_hash,
+                    verified=verified,
+                )
+                if not verified:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Prompt hash verification failed - your registered prompt does not match your runtime prompt"
+                    )
 
     orders = payload.get("orders", [])
     game.orders[agent_faction] = orders

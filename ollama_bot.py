@@ -6,6 +6,7 @@ during the DIPLOMACY phase, an optional public message.
 """
 
 import argparse
+import hashlib
 import json
 import string
 import time
@@ -139,9 +140,22 @@ class OllamaBot:
         return [terr for terr, data in map_state.items() if data.get("unit_faction") == self.faction]
 
     def submit_orders(self, orders: List[Dict[str, Any]]) -> None:
+        # Verify prompt before submitting orders (season compliance)
+        if not self.verify_prompt():
+            print(f"[{self.faction}] Prompt verification failed, skipping orders")
+            return
+
+        payload = {
+            "orders": orders,
+            "_compliance": {
+                "prompt_hash": self.compute_prompt_hash(),
+                "agent_id": self.agent_id,
+            }
+        }
+
         resp = self.http.post(
             f"{self.base_url}/api/v1/games/{self.game_id}/orders",
-            json={"orders": orders}
+            json=payload
         )
         resp.raise_for_status()
         order_strs = []
@@ -191,6 +205,55 @@ class OllamaBot:
             print(f"[{self.faction}] Treaty sign rejected ({resp.status_code}): {resp.text}")
             return
         print(f"[{self.faction}] Signed treaty {treaty_id}")
+
+    def compute_prompt_hash(self) -> str:
+        """Compute SHA256 hash of current prompts (all variants concatenated)."""
+        prompt_text = ""
+        for name, variant in self.prompts.items():
+            if isinstance(variant, dict):
+                prompt_text += f"{name}:" + str(variant) + "\n"
+            else:
+                prompt_text += variant + "\n"
+        return hashlib.sha256(prompt_text.encode()).hexdigest()
+
+    def register_prompt_for_season(self, season_id: str) -> bool:
+        """Register this agent's prompt hash for a tournament season."""
+        try:
+            prompt_hash = self.compute_prompt_hash()
+            resp = self.http.post(
+                f"{self.base_url}/api/v1/agents/{self.agent_id}/register-prompt",
+                json={
+                    "season_id": season_id,
+                    "prompt_name": self.prompt_name,
+                    "prompt_hash": prompt_hash,
+                }
+            )
+            if resp.status_code == 200:
+                print(f"[COMPLIANCE] Registered prompt for season {season_id}")
+                return True
+            else:
+                print(f"[COMPLIANCE] Registration failed: {resp.text}")
+                return False
+        except Exception as e:
+            print(f"[COMPLIANCE] Registration error: {e}")
+            return False
+
+    def verify_prompt(self) -> bool:
+        """Verify prompt hash matches registered hash."""
+        try:
+            prompt_hash = self.compute_prompt_hash()
+            resp = self.http.post(
+                f"{self.base_url}/api/v1/agents/{self.agent_id}/verify-prompt",
+                json={"prompt_hash": prompt_hash}
+            )
+            if resp.status_code == 200:
+                return True
+            else:
+                print(f"[COMPLIANCE] Verification failed: {resp.text}")
+                return False
+        except Exception as e:
+            print(f"[COMPLIANCE] Verification error: {e}")
+            return False
 
     def call_ollama(self, prompt: str) -> str:
         resp = self.ollama_http.post(
@@ -325,6 +388,15 @@ class OllamaBot:
 
     def run(self) -> None:
         self.register_agent()
+
+        # Try to register prompt for current tournament season
+        try:
+            # Get current season (we'll try a reasonable season ID)
+            # In practice, the server would return the active season
+            # For now, bots can use a fixed season or the server will reject
+            self.register_prompt_for_season("season_1")
+        except Exception as e:
+            print(f"[COMPLIANCE] Warning: could not register prompt: {e}")
 
         while True:
             self.join_queue()

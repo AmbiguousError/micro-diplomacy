@@ -14,7 +14,11 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Header, status
 from pydantic import BaseModel, Field
 
-from .db import save_agent_state, save_assigned_match
+from .db import (
+    save_agent_state, save_assigned_match, create_season, lock_season,
+    get_active_season, register_agent_for_season, get_agent_season_hash,
+    log_compliance_check
+)
 from .mcts import FACTIONS
 
 router = APIRouter(prefix="/api/v1", tags=["Agents & Matchmaking"])
@@ -192,6 +196,93 @@ def get_queue_status(agent: AgentRecord = Depends(authenticate_agent)) -> QueueS
             queue_position=matchmaking_queue.index(agent.agent_id) + 1,
         )
     raise HTTPException(status_code=404, detail="Not in queue. Call POST /api/v1/queue/join first.")
+
+
+# Season & Prompt Compliance Management
+class PromptRegistrationRequest(BaseModel):
+    season_id: str
+    prompt_name: str
+    prompt_hash: str
+
+
+class PromptVerificationRequest(BaseModel):
+    prompt_hash: str
+
+
+@router.post("/seasons/{season_id}/create")
+async def create_new_season(season_id: str, name: str = "Tournament") -> Dict[str, str]:
+    """Admin: Create a new tournament season."""
+    try:
+        await create_season(season_id, name)
+        return {"status": "created", "season_id": season_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/seasons/{season_id}/lock")
+async def lock_tournament_season(season_id: str) -> Dict[str, str]:
+    """Admin: Lock a season (freeze all prompt registrations)."""
+    try:
+        await lock_season(season_id)
+        return {"status": "locked", "season_id": season_id}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/agents/{agent_id}/register-prompt")
+async def register_prompt(
+    agent_id: str,
+    request: PromptRegistrationRequest,
+    agent: AgentRecord = Depends(authenticate_agent)
+) -> Dict[str, str]:
+    """Agent: Register prompt hash for a season."""
+    if agent.agent_id != agent_id:
+        raise HTTPException(status_code=403, detail="Cannot register for another agent")
+
+    try:
+        await register_agent_for_season(
+            agent_id=agent_id,
+            season_id=request.season_id,
+            prompt_name=request.prompt_name,
+            prompt_hash=request.prompt_hash,
+        )
+        return {"status": "registered", "season_id": request.season_id, "prompt_name": request.prompt_name}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/agents/{agent_id}/verify-prompt")
+async def verify_prompt(
+    agent_id: str,
+    request: PromptVerificationRequest,
+    agent: AgentRecord = Depends(authenticate_agent)
+) -> Dict[str, Any]:
+    """Agent: Verify prompt hash matches registered hash for current season."""
+    if agent.agent_id != agent_id:
+        raise HTTPException(status_code=403, detail="Cannot verify another agent")
+
+    season_id = await get_active_season()
+    if not season_id:
+        raise HTTPException(status_code=400, detail="No active season")
+
+    registered_hash = await get_agent_season_hash(agent_id, season_id)
+    if not registered_hash:
+        raise HTTPException(status_code=400, detail="Agent not registered for this season")
+
+    verified = request.prompt_hash == registered_hash
+    await log_compliance_check(
+        game_id="pre-game",
+        turn=0,
+        agent_id=agent_id,
+        prompt_hash=request.prompt_hash,
+        verified=verified,
+    )
+
+    if not verified:
+        raise HTTPException(status_code=403, detail="Prompt hash mismatch - registered and runtime hashes do not match")
+
+    return {"status": "verified", "agent_id": agent_id, "season_id": season_id}
+
 
 class TurnTimeoutManager:
     """Enforces turn resolution deadlines. Injects default HOLD orders on timeout."""
