@@ -241,6 +241,16 @@
           allActivity.push({ type: 'event', text: event, turn: currentTurn });
         }
 
+        // Add submitted orders (during ORDERS phase)
+        if (state.phase === 'ORDERS' && state.submitted_orders) {
+          for (const [faction, orders] of Object.entries(state.submitted_orders || {})) {
+            for (const order of orders) {
+              const orderText = `${order.territory}: ${order.action}${order.target ? ' → ' + order.target : ''}`;
+              allActivity.push({ type: 'order', faction, text: orderText, turn: currentTurn });
+            }
+          }
+        }
+
         // Add public messages
         for (const msg of messagesData.messages || []) {
           if (msg.recipient === 'PUBLIC') {
@@ -267,6 +277,19 @@
           if (item.type === 'event') {
             feedHTML += `<div class="text-xs text-slate-400 border-l-2 border-slate-700 pl-3 py-0.5">
               📋 ${item.text}
+            </div>`;
+          } else if (item.type === 'order') {
+            const factionColor = {
+              'Red': 'text-rose-400',
+              'Blue': 'text-indigo-400',
+              'Green': 'text-emerald-400',
+              'Yellow': 'text-amber-400'
+            }[item.faction] || 'text-slate-400';
+
+            feedHTML += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-0.5">
+              <span class="font-bold ${factionColor}">${item.faction}</span>
+              <span class="text-slate-500"> 🎯</span>
+              <span class="text-slate-300"> ${item.text}</span>
             </div>`;
           } else {
             const factionColor = {

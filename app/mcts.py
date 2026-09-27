@@ -135,6 +135,7 @@ class GameState(BaseModel):
     adjacency: Dict[str, List[str]] = {}
     supply_centers: List[str] = []
     coordinates: Dict[str, Dict[str, float]] = {}
+    submitted_orders: Dict[str, List[Dict[str, Any]]] = {}
 
 # =====================================================================
 # 3. ADJUDICATION ALGORITHM

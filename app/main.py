@@ -518,6 +518,7 @@ def get_state(game_id: str):
         adjacency={t: sorted(n) for t, n in game.topology.adjacency.items()},
         supply_centers=sorted(game.topology.supply_centers),
         coordinates=game.topology.coordinates,
+        submitted_orders={f: [o.model_dump() for o in orders] for f, orders in game.orders.items()},
     )
 
 @app.post("/api/v1/games/{game_id}/messages", status_code=201)
@@ -553,6 +554,19 @@ def read_messages(game_id: str, since_turn: int = 1, agent_faction: str = Depend
         )
     ]
     return {"messages": visible_messages}
+
+@app.get("/api/v1/games/{game_id}/public-messages")
+def read_public_messages(game_id: str, since_turn: int = 1):
+    """Spectator-facing endpoint: returns only PUBLIC messages, no auth needed."""
+    game = games.get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    public_messages = [
+        m for m in game.messages
+        if m.turn >= since_turn and m.recipient == "PUBLIC"
+    ]
+    return {"messages": public_messages}
 
 @app.post("/api/v1/games/{game_id}/orders")
 async def submit_orders(game_id: str, payload: Dict[str, List[Order]], agent_faction: str = Depends(get_authorized_faction)):
