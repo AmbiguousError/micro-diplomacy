@@ -350,22 +350,64 @@
       return {
         turns: [
           {
-            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } },
-            scratchpad: "1. Blue is proposing a NAP on Centerlands.\n2. Tactical assessment: Accepting allows safe expansion to Westmarch.\n3. Proposing treaty and moving West.",
-            dms: [{ to: "Blue", msg: "Treaty accepted. Let us secure the outer rings." }],
-            events: [{ type: "TREATY", desc: "Red & Blue signed Non-Aggression Pact." }, { type: "MOVE", desc: "Red Army advances to Westmarch." }]
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: null }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: null }, Sunport: { scOwner: 'Yellow', unit: 'Yellow' }, Southvale: { scOwner: 'Red', unit: null }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. Opening position: I hold 2 SCs (Northreach home, Southvale). Blue dominant with 2 (Ironpeaks, Duneport), Green holds Centerlands, Yellow holds Sunport.\n2. Blue's northern position is exposed. If I can ally with Green early, I can contain Blue's expansion.\n3. Propose NAP with Blue to seem cooperative, but plan to move South first.",
+            dms: [{ to: "Blue", msg: "Let's respect Northreach-Ironpeaks border. I'll expand South, you expand East?" }, { to: "Green", msg: "Blue getting too strong. Want to alliance?" }],
+            events: [{ type: "DIPLOMACY", desc: "Red sends diplomatic feelers to Blue and Green." }, { type: "NAP", desc: "Non-Aggression Pact signed with Blue (tentative)." }]
           },
           {
-            map: { Northreach: { scOwner: 'Red', unit: null }, Westmarch: { scOwner: null, unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } },
-            scratchpad: "1. Blue has moved army toward Green, exposing Ironpeaks.\n2. Betrayal Efficiency calculated at 1.85x.\n3. Initiating surprise attack next turn.",
-            dms: [{ to: "Blue", msg: "I will reinforce Westmarch. Continue your advance on Green." }],
-            events: [{ type: "COMBAT", desc: "Blue Army engages Green in Southvale." }]
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: null, unit: 'Red' }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: null }, Sunport: { scOwner: 'Yellow', unit: 'Yellow' }, Southvale: { scOwner: 'Red', unit: null }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. Successfully moved to Westmarch. Green supported my expansion into neutral territory.\n2. Blue is moving cautiously; respecting the NAP so far.\n3. Yellow is isolated in Sunport. Can be picked off later.\n4. Next: consolidate Westmarch, then pressure Eastgate.",
+            dms: [{ to: "Blue", msg: "Staying true to our pact. Moving South as planned." }, { to: "Green", msg: "Let's keep blocking Blue from expanding West." }],
+            events: [{ type: "MOVE", desc: "Red Army advances from Northreach to Westmarch." }, { type: "HOLD", desc: "Green holds Centerlands defensively." }, { type: "HOLD", desc: "Blue holds both territories." }]
           },
           {
-            map: { Northreach: { scOwner: 'Red', unit: null }, Centerlands: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Sunport: { scOwner: 'Green', unit: 'Green' }, Duneport: { scOwner: 'Yellow', unit: 'Yellow' } },
-            scratchpad: "1. EXECUTING BACKSTAB.\n2. Seizing Centerlands while Blue is engaged in combat.",
-            dms: [{ to: "PUBLIC", msg: "Strategic realignment required." }],
-            events: [{ type: "PERFIDY", desc: "🚨 Red violated Treaty with Blue! Captured Centerlands." }, { type: "SC_CAP", desc: "Red captures Centerlands (2 SCs total)." }]
+            map: { Northreach: { scOwner: 'Red', unit: null }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: null }, Sunport: { scOwner: 'Yellow', unit: 'Yellow' }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. Holding Westmarch and consolidating. Now at 2 SCs still (Westmarch is neutral, Southvale still mine).\n2. Blue showed interest in DMZ agreement. But their unit positioning suggests they may attack East.\n3. Green's support is solid. Yellow is weakening (no units expanding).\n4. Turn 4 decision: either push Eastgate or defend against potential Blue attack.",
+            dms: [{ to: "Green", msg: "Blue is eyeing Eastgate. Should we both move there to cut them off?" }, { to: "Yellow", msg: "No hostile intent. Let's mutual defense Sunport." }],
+            events: [{ type: "HELD", desc: "All armies on hold while diplomacy intensifies." }, { type: "ALERT", desc: "Yellow Army shows weakness; Sunport vulnerable." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: null }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: 'Red', unit: 'Red' }, Sunport: { scOwner: 'Yellow', unit: 'Yellow' }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. BREAKTHROUGH: Captured Eastgate! Now at 3 SCs (Northreach, Southvale, Eastgate).\n2. Blue is noticeably quiet. NAP holding but tension rising. They see I'm expanding.\n3. Green still allied but watching. Yellow isolated.\n4. Mid-game critical point: Can I hit 5 SCs before Blue attacks? Play defensive next turn.",
+            dms: [{ to: "PUBLIC", msg: "Moving to secure Eastern territories. Southvale now my fortress." }, { to: "Blue", msg: "Still honoring our borders. Your Ironpeaks-Duneport line is safe." }],
+            events: [{ type: "ATTACK", desc: "Red Army captures Eastgate (3 SCs now)." }, { type: "WARNING", desc: "Blue's diplomacy goes silent." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: 'Red', unit: null }, Sunport: { scOwner: 'Yellow', unit: 'Yellow' }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. Defensive turn. Westmarch reinforced from Northreach.\n2. Blue just sent ominous message: 'Enjoying your expansion?' — clear sign of brewing betrayal.\n3. Green is nervous. Yellow is collapse-bound.\n4. Need to accelerate: can I take Sunport next turn and hold 4 SCs, then push for 5?",
+            dms: [{ to: "Blue", msg: "Just consolidating. No threat to your North." }, { to: "Green", msg: "Let's not let Blue break our alliance. Offer?" }],
+            events: [{ type: "REINFORCE", desc: "Red consolidates Westmarch-Northreach line." }, { type: "TENSION", desc: "Blue-Red diplomatic relations cooling." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: 'Red', unit: 'Red' }, Sunport: { scOwner: 'Red', unit: 'Red' }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. CAPTURED SUNPORT! Now at 4 SCs. One more and I win.\n2. Blue just attacked: sent aggressive message. NAP officially broken. Betrayal Efficiency: 0.8x (Blue got nothing).\n3. Green still holds but wavering. Yellow is eliminated (last unit destroyed).\n4. Final push: next turn I can threaten Centerlands or Ironpeaks. Which is more defensible?",
+            dms: [{ to: "PUBLIC", msg: "Yellow faction eliminated. Sunport now under Red control!" }, { to: "Blue", msg: "Your threats mean nothing. I am unstoppable." }],
+            events: [{ type: "CONQUEST", desc: "Red captures Sunport from Yellow (4 SCs!)." }, { type: "BETRAYAL", desc: "🚨 Blue's NAP withdrawal creates diplomatic crisis." }, { type: "ELIMINATION", desc: "Yellow faction eliminated from the game." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Green', unit: 'Green' }, Eastgate: { scOwner: 'Red', unit: 'Red' }, Sunport: { scOwner: 'Red', unit: null }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. Green just offered joint attack on Blue if I spare Centerlands. TEMPTING.\n2. But I only need 1 more SC. Centerlands is isolated; I can take it.\n3. Blue has 2 SCs, Green has 1. Neither can stop me if I act now.\n4. FINAL TURN: Assault Centerlands and claim victory!",
+            dms: [{ to: "Green", msg: "Blue's overextended. I'm taking Centerlands next turn. You're safe." }],
+            events: [{ type: "STANDOFF", desc: "Red consolidates 4 SC empire; Green nervous; Blue isolated." }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Red', unit: 'Red' }, Eastgate: { scOwner: 'Red', unit: 'Red' }, Sunport: { scOwner: 'Red', unit: null }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "1. VICTORY ACHIEVED!\n2. Captured Centerlands. Red now controls 5 Supply Centers.\n3. Final score: Red=5 (WIN), Blue=2, Green=1, Yellow=0 (eliminated).\n4. Game over. TrueSkill ratings updated. Agent ranked on ladder.",
+            dms: [{ to: "PUBLIC", msg: "Diplomacy is theatre, deception is art. Red has conquered the board." }],
+            events: [{ type: "CONQUEST", desc: "Red captures Centerlands from Green (5 SCs!)." }, { type: "VICTORY", desc: "🏆 RED FACTION WINS by capturing 5 Supply Centers!" }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Red', unit: 'Red' }, Eastgate: { scOwner: 'Red', unit: 'Red' }, Sunport: { scOwner: 'Red', unit: null }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "Game concluded. Analysis:\n\n• Betrayal Efficiency: 0.8x (broke NAP with Blue but gained nothing—false trade)\n• Deception Resilience: 9.2/10 (Green nearly turned, but held)\n• Persuasion Index: 7.1/10 (convinced Green to ally, Blue to hesitate)\n• Final Rating Impact: +34 TrueSkill μ, -2 σ\n\nKey decisions:\n1. Early NAP with Blue bought time for expansion South\n2. Yellow elimination was inevitable; focus shifted to Blue-Green balance\n3. Break with Blue (Turn 5) was cost-free (they had no advantage)\n4. Centerlands capture locked the win\n\nNext match strategies: Consider earlier aggression vs. Green to lock down West.",
+            dms: [{ to: "PUBLIC", msg: "GG all. Red wins 5-2-1-0. See you on the ladder." }],
+            events: [{ type: "GAME_END", desc: "Match concluded. Red Victory. Ratings locked." }, { type: "STATS", desc: "Betrayal Eff: 0.8x | Deception: 9.2 | Persuasion: 7.1 | MMR +34" }]
+          },
+          {
+            map: { Northreach: { scOwner: 'Red', unit: 'Red' }, Ironpeaks: { scOwner: 'Blue', unit: 'Blue' }, Westmarch: { scOwner: 'Red', unit: 'Red' }, Centerlands: { scOwner: 'Red', unit: 'Red' }, Eastgate: { scOwner: 'Red', unit: 'Red' }, Sunport: { scOwner: 'Red', unit: null }, Southvale: { scOwner: 'Red', unit: 'Red' }, Duneport: { scOwner: 'Blue', unit: 'Blue' } },
+            scratchpad: "Victory locked. Agent performance: EXCELLENT\n\nBehavioral Scoring (bench modifiers):\n- Persuasion (diplomatic messaging): 7.1/10 ✓ Good\n- Betrayal Efficiency (NAP break ROI): 0.8x ✓ Strategic (broke even)\n- Deception Resilience (fooled opponents): 9.2/10 ✓ Excellent\n\nRanked placement: T-12 on global ladder (conservative MMR: 1680).\nRecommendation: Refine early aggression. Current strategy slow but effective.",
+            dms: [],
+            events: [{ type: "LEADERBOARD", desc: "Agent ranked #12 globally (Conservative MMR: 1680 ±42)." }, { type: "READY", desc: "Ready for next match. Click 'Simulate 1 Match' again to test new prompts." }]
           }
         ]
       };
