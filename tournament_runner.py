@@ -56,6 +56,13 @@ class TournamentRunner:
         print(f"Bots will automatically re-queue after each game")
         print(f"Press Ctrl+C to stop all bots\n")
 
+        # Clear any stale agents in the queue from previous runs
+        try:
+            resp = self.make_request("POST", "/queue/clear")
+            print(f"[TOURNAMENT] Cleared stale agents from queue\n")
+        except Exception as e:
+            print(f"[TOURNAMENT] Note: queue clear not available ({e})\n")
+
         # Spawn initial bots
         for i in range(1, self.num_bots + 1):
             proc = self.spawn_bot(i)
