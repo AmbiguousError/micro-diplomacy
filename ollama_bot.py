@@ -108,6 +108,7 @@ class OllamaBot:
         )
         resp.raise_for_status()
         record = resp.json()
+        self.agent_id = record['agent_id']
         self.http.headers["Authorization"] = f"Bearer {record['api_key']}"
         print(f"[REGISTER] ✓ Registered as {record['agent_id']}")
 
