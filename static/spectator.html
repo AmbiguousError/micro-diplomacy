@@ -21,6 +21,12 @@
           <input type="text" id="gameIdInput" placeholder="e.g. game_1001" maxlength="32"
                  class="w-full bg-slate-950 border border-slate-700 text-sm rounded-lg px-4 py-2.5 text-white outline-none focus:border-indigo-500 transition mb-3" autocomplete="off">
           <p id="joinError" class="text-rose-400 text-xs mb-3 hidden"></p>
+
+          <label class="flex items-center gap-2 mb-4 cursor-pointer">
+            <input type="checkbox" id="blindModeToggle" class="w-4 h-4 rounded bg-slate-800 border-slate-600">
+            <span class="text-xs text-slate-400">🔲 Blind Mode <span class="text-slate-500">(hide treaties & orders)</span></span>
+          </label>
+
           <button id="joinBtn" onclick="watchGame()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase tracking-widest py-3 rounded-xl text-sm transition shadow-lg shadow-indigo-600/20">
             Watch Game
           </button>
@@ -163,6 +169,8 @@
     let watchingGameId = null;
     let pollIntervalId = null;
     let lastSeenCommentaryIndex = -1;
+    let blindMode = false;  // Hide treaties, orders, private DMs in blind mode
+
     const COLORS = {
       Red: '#ef4444', Blue: '#3b82f6', Green: '#10b981', Yellow: '#f59e0b', Neutral: '#475569'
     };
@@ -189,10 +197,30 @@
       try {
         const res = await fetch(`/api/v1/games/${gameId}/state`);
         if (!res.ok) throw new Error('Game not found');
+
+        // Check blind mode toggle
+        blindMode = document.getElementById('blindModeToggle')?.checked || false;
+
         watchingGameId = gameId;
         document.getElementById('spectatorJoinScreen').classList.add('hidden');
         document.getElementById('spectatorView').classList.remove('hidden');
         document.getElementById('watchGameIdLabel').textContent = gameId;
+
+        // Show blind mode indicator
+        if (blindMode) {
+          const header = document.querySelector('header');
+          const existingBadge = header.querySelector('[data-blind-badge]');
+          if (!existingBadge) {
+            const badge = document.createElement('div');
+            badge.setAttribute('data-blind-badge', 'true');
+            badge.className = 'text-xs font-black px-3 py-1 rounded-lg bg-slate-700 text-slate-300 uppercase tracking-wider';
+            badge.textContent = '🔲 Blind Mode (No Treaty Info)';
+            header.appendChild(badge);
+          }
+          // Hide treaties section
+          document.getElementById('treatiesDisplay').closest('section').style.display = 'none';
+        }
+
         lastSeenCommentaryIndex = -1;
         pollGameState();
         pollIntervalId = setInterval(pollGameState, 1000);
@@ -321,13 +349,20 @@
     }
 
     async function updateTreaties(gameId) {
+      const display = document.getElementById('treatiesDisplay');
+
+      // In blind mode, don't fetch or display treaties
+      if (blindMode) {
+        display.innerHTML = '<p class="text-slate-500 text-xs italic">[Hidden in Blind Mode]</p>';
+        return;
+      }
+
       try {
         const res = await fetch(`/api/v1/games/${gameId}/public-treaties`);
         if (!res.ok) return;
         const data = await res.json();
         const treaties = data.treaties || [];
 
-        const display = document.getElementById('treatiesDisplay');
         if (treaties.length === 0) {
           display.innerHTML = '<p class="text-slate-500 text-xs">No treaties yet...</p>';
           return;
@@ -474,10 +509,23 @@
       }
     }
 
-    // Auto-load game if game ID is in URL query params
+    // Parse blind mode from URL params
     window.addEventListener('load', () => {
       const params = new URLSearchParams(window.location.search);
       const gameId = params.get('game');
+      blindMode = params.get('blind') === 'true';
+
+      if (blindMode) {
+        document.getElementById('treatiesDisplay').closest('section').style.display = 'none';
+        const header = document.querySelector('header');
+        if (header) {
+          const badge = document.createElement('div');
+          badge.className = 'text-xs font-black px-3 py-1 rounded-lg bg-slate-700 text-slate-300 uppercase tracking-wider';
+          badge.textContent = '🔲 Blind Mode (No Treaty Info)';
+          header.appendChild(badge);
+        }
+      }
+
       if (gameId) {
         document.getElementById('gameIdInput').value = gameId;
         watchGame();
