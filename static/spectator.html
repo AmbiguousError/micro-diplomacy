@@ -8,7 +8,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen">
 <script src="/nav.js"></script>
-  <div class="p-6 flex flex-col">
+  <div class="p-3 flex flex-col">
 
     <!-- GAME SELECTOR (HIDDEN WHEN WATCHING) -->
     <div id="spectatorJoinScreen" class="flex-1 flex items-center justify-center min-h-[70vh]">
@@ -32,37 +32,37 @@
     <div id="spectatorView" class="hidden flex-1 flex flex-col">
 
       <!-- Header: Game Status -->
-      <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 border-b border-slate-800 pb-4 mb-6">
+      <header class="flex items-center justify-between gap-3 border-b border-slate-800 pb-2 mb-3">
         <div>
-          <h1 class="text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">Spectator Desk</h1>
-          <p class="text-slate-400 text-sm mt-1">Watching <span id="watchGameIdLabel" class="font-mono text-slate-500">-</span></p>
+          <h1 class="text-lg font-black uppercase tracking-wider text-white">Spectator Desk</h1>
+          <p class="text-slate-400 text-xs mt-0.5">Watching <span id="watchGameIdLabel" class="font-mono text-slate-500">-</span></p>
         </div>
-        <div class="flex items-center gap-2 sm:gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800 shadow-inner self-stretch sm:self-auto">
-          <div class="flex-1 sm:flex-none text-center px-2 sm:px-4 border-r border-slate-700">
-            <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Turn</span>
-            <span class="text-xl sm:text-2xl font-black text-indigo-400" id="turnDisplay">1</span>
+        <div class="flex items-center gap-1 bg-slate-900 p-2 rounded-lg border border-slate-800 text-xs">
+          <div class="text-center px-2 border-r border-slate-700">
+            <span class="block text-[9px] text-slate-500 uppercase font-bold">Turn</span>
+            <span class="font-black text-indigo-400 text-sm" id="turnDisplay">1</span>
           </div>
-          <div class="flex-1 sm:flex-none text-center px-2 sm:px-4 border-r border-slate-700">
-            <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Phase</span>
-            <span class="text-base sm:text-xl font-black text-amber-400 animate-pulse" id="phaseDisplay">DIPLOMACY</span>
+          <div class="text-center px-2 border-r border-slate-700">
+            <span class="block text-[9px] text-slate-500 uppercase font-bold">Phase</span>
+            <span class="font-black text-amber-400 animate-pulse text-sm" id="phaseDisplay">DIPLOMACY</span>
           </div>
-          <div class="flex-1 sm:flex-none text-center px-2 sm:px-4">
-            <span class="block text-[10px] text-slate-500 uppercase tracking-widest font-bold">Time Remaining</span>
-            <span class="text-xl sm:text-2xl font-black text-rose-400 font-mono" id="timerDisplay">00:00</span>
+          <div class="text-center px-2">
+            <span class="block text-[9px] text-slate-500 uppercase font-bold">Time</span>
+            <span class="font-black text-rose-400 font-mono text-sm" id="timerDisplay">00:00</span>
           </div>
         </div>
       </header>
 
       <!-- Live Battle Map -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
-        <div class="flex justify-between items-center mb-3">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Theater Map</h2>
-          <div class="text-[10px] text-slate-400 space-y-1">
-            <div>★ = Supply Center</div>
-            <div>▲ = Unit (with faction initial)</div>
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-3 shadow-2xl">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">Map</h2>
+          <div class="text-[9px] text-slate-400 space-x-2 flex">
+            <span>★ SC</span>
+            <span>▲ Unit</span>
           </div>
         </div>
-        <svg viewBox="0 0 800 500" class="w-full h-72 drop-shadow-lg map-svg">
+        <svg viewBox="0 0 800 500" class="w-full h-48 drop-shadow-lg map-svg">
           <defs>
             <style>
               .territory-node { cursor: pointer; }
@@ -75,77 +75,52 @@
         </svg>
       </section>
 
-      <!-- MAP LEGEND -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 shadow-2xl">
-        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">Legend</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded-full border-2 border-yellow-400 bg-yellow-900/30"></div>
-            <span class="text-slate-400">Supply Center</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-4 h-4 rounded-full bg-blue-500"></div>
-            <span class="text-slate-400">Unit Present</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <svg class="w-5 h-5" viewBox="0 0 20 20"><text x="10" y="14" text-anchor="middle" font-size="14" fill="#fbbf24">★</text></svg>
-            <span class="text-slate-400">High Value</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <div class="w-6 h-6 rounded-full border border-slate-500 bg-slate-800/50"></div>
-            <span class="text-slate-400">Neutral</span>
-          </div>
-        </div>
-      </section>
 
       <!-- SCOREBOARD: Supply Centers Held -->
-      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4">Scoreboard</h2>
-        <div id="scoreboardDisplay" class="grid grid-cols-4 gap-3">
-          <div class="text-center p-3 bg-slate-800 rounded-lg">
-            <div class="text-xs text-slate-500 font-bold uppercase">Red</div>
-            <div class="text-2xl font-black text-rose-400" id="scoreRed">0</div>
+      <section class="bg-slate-900 border border-slate-800 rounded-xl p-3 mb-3 shadow-2xl">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">Scores</h2>
+        <div id="scoreboardDisplay" class="grid grid-cols-4 gap-2">
+          <div class="text-center p-2 bg-slate-800 rounded">
+            <div class="text-[9px] text-slate-500 font-bold uppercase">Red</div>
+            <div class="text-lg font-black text-rose-400" id="scoreRed">0</div>
           </div>
-          <div class="text-center p-3 bg-slate-800 rounded-lg">
-            <div class="text-xs text-slate-500 font-bold uppercase">Blue</div>
-            <div class="text-2xl font-black text-indigo-400" id="scoreBlue">0</div>
+          <div class="text-center p-2 bg-slate-800 rounded">
+            <div class="text-[9px] text-slate-500 font-bold uppercase">Blue</div>
+            <div class="text-lg font-black text-indigo-400" id="scoreBlue">0</div>
           </div>
-          <div class="text-center p-3 bg-slate-800 rounded-lg">
-            <div class="text-xs text-slate-500 font-bold uppercase">Green</div>
-            <div class="text-2xl font-black text-emerald-400" id="scoreGreen">0</div>
+          <div class="text-center p-2 bg-slate-800 rounded">
+            <div class="text-[9px] text-slate-500 font-bold uppercase">Green</div>
+            <div class="text-lg font-black text-emerald-400" id="scoreGreen">0</div>
           </div>
-          <div class="text-center p-3 bg-slate-800 rounded-lg">
-            <div class="text-xs text-slate-500 font-bold uppercase">Yellow</div>
-            <div class="text-2xl font-black text-amber-400" id="scoreYellow">0</div>
+          <div class="text-center p-2 bg-slate-800 rounded">
+            <div class="text-[9px] text-slate-500 font-bold uppercase">Yellow</div>
+            <div class="text-lg font-black text-amber-400" id="scoreYellow">0</div>
           </div>
         </div>
       </section>
 
       <!-- PUBLIC CHAT & GAME EVENTS FEED -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-2xl flex flex-col gap-2">
 
       <!-- Header -->
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-3">
-          <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-          <div>
-            <h3 class="text-sm font-black uppercase tracking-wider text-slate-100">Live Feed</h3>
-            <span class="text-[10px] text-slate-500 font-mono">Public Messages & Events</span>
-          </div>
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-100">Live Feed</h3>
         </div>
       </div>
 
       <!-- Messages & Events -->
-      <div id="liveEventsFeed" class="space-y-2 max-h-64 overflow-y-auto">
+      <div id="liveEventsFeed" class="space-y-1 max-h-40 overflow-y-auto text-[11px]">
         <p class="text-slate-500 text-xs">Waiting for activity...</p>
       </div>
 
     </div>
 
       <!-- Exit Button -->
-      <div class="flex gap-3 mt-6">
-        <button onclick="stopWatching()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-4 py-2 rounded-lg transition">
-          Stop Watching
+      <div class="flex gap-2 mt-2">
+        <button onclick="stopWatching()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3 py-1.5 rounded transition">
+          Stop
         </button>
       </div>
     </div>
@@ -361,14 +336,14 @@
         for (const item of allActivity.slice(-50)) {
           // Add turn divider if turn changed
           if (item.turn !== lastTurn) {
-            feedHTML += `<div class="text-[10px] font-black text-indigo-500 uppercase mt-2 mb-1 opacity-60">
-              ─── Turn ${item.turn} ───
+            feedHTML += `<div class="text-[8px] font-black text-indigo-500 uppercase mt-1 mb-0.5 opacity-60">
+              ─ Turn ${item.turn} ─
             </div>`;
             lastTurn = item.turn;
           }
 
           if (item.type === 'event') {
-            feedHTML += `<div class="text-xs text-slate-400 border-l-2 border-slate-700 pl-3 py-0.5">
+            feedHTML += `<div class="text-[10px] text-slate-400 border-l border-slate-700 pl-2 py-0.5">
               📋 ${item.text}
             </div>`;
           } else if (item.type === 'order') {
@@ -379,7 +354,7 @@
               'Yellow': 'text-amber-400'
             }[item.faction] || 'text-slate-400';
 
-            feedHTML += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-0.5">
+            feedHTML += `<div class="text-[10px] border-l border-slate-700 pl-2 py-0.5">
               <span class="font-bold ${factionColor}">${item.faction}</span>
               <span class="text-slate-500"> 🎯</span>
               <span class="text-slate-300"> ${item.text}</span>
@@ -392,7 +367,7 @@
               'Yellow': 'text-amber-400'
             }[item.sender] || 'text-slate-400';
 
-            feedHTML += `<div class="text-xs border-l-2 border-slate-700 pl-3 py-0.5">
+            feedHTML += `<div class="text-[10px] border-l border-slate-700 pl-2 py-0.5">
               <span class="font-bold ${factionColor}">${item.sender}</span>
               <span class="text-slate-500">:</span>
               <span class="text-slate-300"> ${item.text}</span>
