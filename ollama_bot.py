@@ -75,6 +75,8 @@ class OllamaBot:
         self.faction: Optional[str] = None
         self.last_orders_turn = 0
         self.last_diplomacy_turn = 0
+        self.previous_map_state: Optional[Dict] = None  # Track previous turn's map state
+        self.vacated_scs: List[str] = []  # Supply centers vacated last turn
 
     def _load_prompts(self, prompts_file: Optional[str], prompt_name: str) -> Dict[str, str]:
         prompts = dict(DEFAULT_PROMPTS)
@@ -140,6 +142,27 @@ class OllamaBot:
     def get_owned_units(self, map_state: Dict[str, Any]) -> List[str]:
         return [terr for terr, data in map_state.items() if data.get("unit_faction") == self.faction]
 
+    def detect_vacated_scs(self, current_map: Dict[str, Any]) -> List[str]:
+        """Detect supply centers that were occupied last turn but are now empty."""
+        if not self.previous_map_state:
+            self.previous_map_state = current_map
+            return []
+
+        vacated = []
+        supply_centers = {"Northreach", "Ironpeaks", "Centerlands", "Sunport", "Southvale", "Duneport"}
+
+        for sc in supply_centers:
+            prev = self.previous_map_state.get(sc, {})
+            curr = current_map.get(sc, {})
+
+            # SC was occupied last turn but is now unowned
+            if prev.get("unit_faction") and not curr.get("unit_faction"):
+                vacated.append(sc)
+
+        self.previous_map_state = current_map
+        self.vacated_scs = vacated
+        return vacated
+
     def submit_orders(self, orders: List[Dict[str, Any]]) -> None:
         # Verify prompt before submitting orders (season compliance)
         # In ladder mode (no active season), this just logs and allows
@@ -179,7 +202,8 @@ class OllamaBot:
             json={"recipient": recipient, "content": content},
         )
         resp.raise_for_status()
-        print(f"[{self.faction}] Message to {recipient}: {content}")
+        display = content[:80] + "..." if len(content) > 80 else content
+        print(f"[{self.faction}] Message to {recipient}: {display}")
 
     def get_pending_treaties(self) -> List[Dict[str, Any]]:
         resp = self.http.get(f"{self.base_url}/api/v1/games/{self.game_id}/treaties")
@@ -303,7 +327,11 @@ class OllamaBot:
                 n_data = game_map.get(n, {})
                 owner = n_data.get("sc_owner")
                 if n in supply_centers and owner is None:
-                    neighbor_notes.append(f"{n} (EMPTY supply center - capturing it scores a point)")
+                    # Highlight vacated SCs (just became empty)
+                    if n in self.vacated_scs:
+                        neighbor_notes.append(f"{n} (VACATED supply center - just abandoned, grab it now!)")
+                    else:
+                        neighbor_notes.append(f"{n} (EMPTY supply center - capturing it scores a point)")
                 elif n in supply_centers and owner == self.faction:
                     neighbor_notes.append(f"{n} (your own supply center)")
                 elif n in supply_centers:
@@ -313,11 +341,13 @@ class OllamaBot:
             unit_briefs.append(f"- Unit at {terr} can MOVE to: {'; '.join(neighbor_notes)}")
 
         enemy_factions = [f for f in ("Red", "Blue", "Green", "Yellow") if f != self.faction]
+        vacated_note = f"VACATED supply centers (just abandoned): {', '.join(self.vacated_scs)}" if self.vacated_scs else "No vacated supply centers this turn."
         prompt = string.Template(self.prompts["orders"]).safe_substitute(
             faction=self.faction,
             unit_briefs="\n".join(unit_briefs),
             my_units=my_units,
             enemy_factions=", ".join(enemy_factions),
+            vacated_scs=vacated_note,
         )
         orders: List[Dict[str, Any]] = []
         try:
@@ -435,6 +465,8 @@ class OllamaBot:
 
                     if state["phase"] == "ORDERS" and self.last_orders_turn < state["turn"]:
                         print(f"[Turn {state['turn']}] ORDERS PHASE")
+                        # Detect supply centers vacated in the previous turn
+                        self.detect_vacated_scs(state["map"])
                         orders = self.decide_orders(state)
                         if orders:
                             self.submit_orders(orders)

@@ -77,7 +77,7 @@ class GameSession:
         self.map_mode = map_mode
         self.turn = 1
         self.phase = Phase.DIPLOMACY
-        self.time_remaining = 30
+        self.time_remaining = 10
         self.winner: Optional[str] = None
         self.messages: List[Message] = []
         self.orders: Dict[str, List[Order]] = {f: [] for f in FACTIONS}
@@ -141,7 +141,7 @@ class GameSession:
     def step_phase(self):
         if self.phase == Phase.DIPLOMACY:
             self.phase = Phase.ORDERS
-            self.time_remaining = 30
+            self.time_remaining = 10
             self.run_bot_orders()
         elif self.phase == Phase.ORDERS:
             self.resolve_turn()
@@ -181,7 +181,7 @@ class GameSession:
 
         self.turn += 1
         self.phase = Phase.DIPLOMACY
-        self.time_remaining = 30
+        self.time_remaining = 10
         self.run_bot_diplomacy()
 
     def _topology_to_dict(self) -> Dict[str, Any]:

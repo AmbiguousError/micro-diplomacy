@@ -2,12 +2,15 @@
 """
 Continuous Tournament Runner
 Spawns multiple bots that automatically re-queue for new games after each match.
+Supports random persona selection.
 """
 
 import subprocess
 import time
 import sys
 import signal
+import random
+import yaml
 from typing import List, Optional
 import httpx
 
@@ -122,17 +125,42 @@ if __name__ == "__main__":
     parser.add_argument("--prompts-file", default="prompts.yaml", help="YAML file of named prompt variants")
     parser.add_argument(
         "--prompt-names",
-        default="default",
+        default=None,
         help="Comma-separated prompt variant names to cycle across bots, e.g. 'aggressive,cautious' for a 4-bot A/B test",
+    )
+    parser.add_argument(
+        "--random",
+        action="store_true",
+        help="Select random personas for each tournament (overrides --prompt-names)",
     )
     parser.add_argument("--base-url", default="http://localhost:8000", help="Referee server URL to play against")
     args = parser.parse_args()
+
+    # Handle random persona selection
+    if args.random:
+        try:
+            with open(args.prompts_file) as f:
+                data = yaml.safe_load(f) or {}
+            all_personas = [name for name in data.keys() if isinstance(data[name], dict)]
+            if len(all_personas) < 4:
+                print(f"Error: Need at least 4 personas, found {len(all_personas)}")
+                sys.exit(1)
+            selected_personas = random.sample(all_personas, 4)
+            print(f"[TOURNAMENT] Randomly selected personas: {', '.join(selected_personas)}\n")
+            prompt_names = selected_personas
+        except FileNotFoundError:
+            print(f"Error: {args.prompts_file} not found")
+            sys.exit(1)
+    else:
+        # Use provided prompt names or default
+        prompt_names_str = args.prompt_names or "default"
+        prompt_names = [n.strip() for n in prompt_names_str.split(",") if n.strip()]
 
     runner = TournamentRunner(
         num_bots=args.num_bots,
         ollama_model=args.model,
         prompts_file=args.prompts_file,
-        prompt_names=[n.strip() for n in args.prompt_names.split(",") if n.strip()],
+        prompt_names=prompt_names,
         base_url=args.base_url,
     )
 

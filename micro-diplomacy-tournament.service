@@ -1,0 +1,31 @@
+[Unit]
+Description=Micro-Diplomacy Random Tournament Server
+Documentation=https://github.com/your-org/micro-diplomacy
+After=network.target
+Wants=multi-user.target
+
+[Service]
+Type=simple
+User=g
+WorkingDirectory=/home/g/Documents/micro-diplomacy
+Environment="PATH=/home/g/Documents/micro-diplomacy/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/bin/bash /home/g/Documents/micro-diplomacy/run_tournaments.sh 0
+Restart=always
+RestartSec=10
+
+# Resource limits
+MemoryLimit=2G
+CPUQuota=80%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=diplomacy-tournament
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
