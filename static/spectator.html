@@ -227,7 +227,7 @@
         const feed = document.getElementById('liveEventsFeed');
 
         // Fetch public messages and events
-        const messagesRes = await fetch(`/api/v1/games/${gameId}/messages`);
+        const messagesRes = await fetch(`/api/v1/games/${gameId}/public-messages`);
         const messagesData = messagesRes.ok ? await messagesRes.json() : { messages: [] };
 
         const stateRes = await fetch(`/api/v1/games/${gameId}/state`);
