@@ -55,11 +55,47 @@
 
       <!-- Live Battle Map -->
       <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-8 shadow-2xl">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-2">Theater Map</h2>
-        <svg viewBox="0 0 800 500" class="w-full h-64 drop-shadow-lg">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Theater Map</h2>
+          <div class="text-[10px] text-slate-400 space-y-1">
+            <div>★ = Supply Center</div>
+            <div>▲ = Unit (with faction initial)</div>
+          </div>
+        </div>
+        <svg viewBox="0 0 800 500" class="w-full h-72 drop-shadow-lg map-svg">
+          <defs>
+            <style>
+              .territory-node { cursor: pointer; }
+              .territory-node:hover circle:first-of-type { stroke-width: 4; }
+              .supply-center { filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.4)); }
+            </style>
+          </defs>
           <g id="mapEdgesLayer" stroke="#334155" stroke-width="2" stroke-dasharray="4 4" opacity="0.6"></g>
           <g id="mapNodesLayer"></g>
         </svg>
+      </section>
+
+      <!-- MAP LEGEND -->
+      <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-6 shadow-2xl">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">Legend</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full border-2 border-yellow-400 bg-yellow-900/30"></div>
+            <span class="text-slate-400">Supply Center</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-4 rounded-full bg-blue-500"></div>
+            <span class="text-slate-400">Unit Present</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5" viewBox="0 0 20 20"><text x="10" y="14" text-anchor="middle" font-size="14" fill="#fbbf24">★</text></svg>
+            <span class="text-slate-400">High Value</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-full border border-slate-500 bg-slate-800/50"></div>
+            <span class="text-slate-400">Neutral</span>
+          </div>
+        </div>
       </section>
 
       <!-- SCOREBOARD: Supply Centers Held -->
@@ -239,18 +275,38 @@
         const scColor = tData.sc_owner ? COLORS[tData.sc_owner] : '#1e293b';
         const unitColor = tData.unit_faction ? COLORS[tData.unit_faction] : 'transparent';
         const isSC = (state.supply_centers || []).includes(name);
-        const strokeColor = isSC ? '#f8fafc' : '#475569';
-        const strokeW = isSC ? '2.5' : '1.5';
+        const hasUnit = tData.unit_faction ? true : false;
+        const strokeColor = isSC ? '#fbbf24' : '#475569';
+        const strokeW = isSC ? '3' : '2';
 
-        let html = `<g id="node-${name}">`;
-        html += `<circle cx="${pos.x}" cy="${pos.y}" r="38" fill="${scColor}" fill-opacity="0.25" stroke="${strokeColor}" stroke-width="${strokeW}" />`;
-        if (isSC) html += `<text x="${pos.x}" y="${pos.y - 44}" text-anchor="middle" font-size="14" fill="#fbbf24">★</text>`;
-        if (tData.unit_faction) {
-          html += `<circle cx="${pos.x}" cy="${pos.y}" r="20" fill="${unitColor}" stroke="#0f172a" stroke-width="3" />`;
-          html += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="11" font-weight="900" fill="#ffffff">${tData.unit_faction[0]}</text>`;
+        // Tooltip text
+        const tooltip = `${name}${isSC ? ' (SC)' : ''} ${tData.sc_owner ? `[${tData.sc_owner}]` : ''} ${tData.unit_faction ? `▲${tData.unit_faction[0]}` : ''}`;
+
+        let html = `<g id="node-${name}" class="territory-node" title="${tooltip}">`;
+
+        // SC glow effect (outer ring for supply centers)
+        if (isSC) {
+          html += `<circle cx="${pos.x}" cy="${pos.y}" r="44" fill="none" stroke="${strokeColor}" stroke-width="1" opacity="0.4" />`;
         }
-        html += `<rect x="${pos.x - 35}" y="${pos.y + 44}" width="70" height="16" rx="3" fill="#0f172a" fill-opacity="0.8" />`;
-        html += `<text x="${pos.x}" y="${pos.y + 55}" text-anchor="middle" font-size="11" font-weight="bold" fill="#cbd5e1">${name}</text>`;
+
+        // Territory circle
+        html += `<circle cx="${pos.x}" cy="${pos.y}" r="38" fill="${scColor}" fill-opacity="0.35" stroke="${strokeColor}" stroke-width="${strokeW}" class="${isSC ? 'supply-center' : ''}" />`;
+
+        // SC star indicator (larger and more prominent)
+        if (isSC) {
+          html += `<text x="${pos.x}" y="${pos.y - 46}" text-anchor="middle" font-size="18" font-weight="bold" fill="#fbbf24">★</text>`;
+        }
+
+        // Unit (if present)
+        if (hasUnit) {
+          html += `<circle cx="${pos.x}" cy="${pos.y}" r="22" fill="${unitColor}" stroke="#0f172a" stroke-width="3" opacity="0.9" />`;
+          html += `<text x="${pos.x}" y="${pos.y + 5}" text-anchor="middle" font-size="13" font-weight="900" fill="#ffffff">${tData.unit_faction[0]}</text>`;
+        }
+
+        // Territory label with background
+        html += `<rect x="${pos.x - 40}" y="${pos.y + 46}" width="80" height="18" rx="4" fill="#0f172a" fill-opacity="0.9" stroke="${isSC ? '#fbbf24' : '#475569'}" stroke-width="1" />`;
+        html += `<text x="${pos.x}" y="${pos.y + 59}" text-anchor="middle" font-size="11" font-weight="bold" fill="#e2e8f0">${name}</text>`;
+
         html += `</g>`;
         return html;
       }).join('');
